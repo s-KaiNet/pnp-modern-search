@@ -108,13 +108,13 @@ export class FilterDateRangeComponent extends React.Component<IFilterDateRangeCo
 
         if (this.state.selectedFromDate) {
             const minDdate = new Date(this.state.selectedFromDate.getTime());
-            minDdate.setDate(this.state.selectedFromDate.getDate() + 1);
+            minDdate.setDate(this.state.selectedFromDate.getDate());
             toProps.minDate = minDdate;
         }
 
         if (this.state.selectedToDate) {
             const maxDate = new Date(this.state.selectedToDate.getTime());
-            maxDate.setDate(this.state.selectedToDate.getDate() - 1);
+            maxDate.setDate(this.state.selectedToDate.getDate());
             fromProps.maxDate = maxDate;
         }
 
@@ -160,6 +160,10 @@ export class FilterDateRangeComponent extends React.Component<IFilterDateRangeCo
     }
 
     private _updateToDate(toDate: Date) {
+      
+        if (toDate) {
+            toDate.setHours(23, 59, 59, 999);
+        }
 
         this.setState({
             selectedToDate: toDate
