@@ -42,6 +42,12 @@ export class ItemSelectionWebComponent extends BaseWebComponent {
         const htmlContent: Document = domParser.parseFromString(this.innerHTML, 'text/html');
         const contentTemplate = htmlContent.getElementById('content');
 
+        // Check if contentTemplate exists before accessing innerHTML
+        if (!contentTemplate) {
+            console.warn('ItemSelectionWebComponent: No element with id "content" found in template');
+            return;
+        }
+
         const renderTemplateContent = <div style={{ width: '100%' }} dangerouslySetInnerHTML={{ __html: contentTemplate.innerHTML }}></div>;
         let renderItemSelection = renderTemplateContent;
 

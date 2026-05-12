@@ -88,6 +88,7 @@ The next step is to fill information about your new layout. In the library main 
 | `iconName` | An Office UI Fabric icon for your layout.
 | `key` | An unique internal key for your layout.
 | `type` | The layout type (`LayoutType.Results` is for the 'Data Visualizer' Web Part, `LayoutType.Filter` for the 'Data Filter' Web Part). Only **`LayoutType.Results`** is supported for now. You can't add custom layout for the 'Data Filter' Web Part.
+| `renderType` | The layout render type is used to define if your layout is based on HTML, CSS and Handlebars or JSON (adaptive cards).
 | `templateContent` | The template HTML content as string. Use a `require` statement to get the string content from your HTML file. If you reference a JSON file, you must use the stringified value (ex: `JSON.stringify(require('../custom-layout.json'), null, "\t")`)
 | `serviceKey` | A service key used to instanciate your layout class. Builtin or custom data layouts are instanciated dynamically using [SPFx service scopes](https://docs.microsoft.com/en-us/javascript/api/sp-core-library/servicescope?view=sp-typescript-latest).
 
@@ -101,6 +102,7 @@ public getCustomLayouts(): ILayoutDefinition[] {
             iconName: 'Color',
             key: 'CustomLayout',
             type: LayoutType.Results,
+            renderType: LayoutRenderType.Handlebars,
             templateContent: require('../custom-layout.html').default.toString(),
             serviceKey: ServiceKey.create<ILayout>('MyCompany:CustomLayout', Customlayout)
         }

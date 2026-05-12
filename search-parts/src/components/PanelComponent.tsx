@@ -6,10 +6,8 @@ import { Panel, PanelType, IPanelProps, Text, ITheme } from '@fluentui/react';
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
 import { Log } from "@microsoft/sp-core-library";
 import styles from "./PanelComponent.module.scss";
-// import * as DOMPurify from 'dompurify';
-import * as DOMPurify from "isomorphic-dompurify";
 import { PnPClientStorage } from "@pnp/common/storage";
-import { Constants } from '../common/Constants';
+import { DomPurifyHelper } from '../helpers/DomPurifyHelper';
 
 const PanelComponent_LogSource = "PnPModernSearch:PanelComponent";
 
@@ -81,15 +79,9 @@ export class PanelComponent extends React.Component<IPanelComponentProps, IPanel
      */
     private clientStorage: PnPClientStorage;
     private panelComponentUniqueKey: string = "PnPModernSearch:PanelComponent";
-    private _domPurify: any;
 
     constructor(props: IPanelComponentProps) {
         super(props);
-        this._domPurify = DOMPurify;
-        this._domPurify.setConfig({
-            WHOLE_DOCUMENT: true,
-            ALLOWED_URI_REGEXP: Constants.ALLOWED_URI_REGEXP,
-        });
 
         this.state = {
             showPanel: this.props.isOpen
@@ -126,7 +118,7 @@ export class PanelComponent extends React.Component<IPanelComponentProps, IPanel
                 return <div style={{
                     overflow: 'auto',
                     marginLeft: 15
-                }} dangerouslySetInnerHTML={{ __html: this._domPurify.sanitize(this.props.contentTemplate) }}>
+                }} dangerouslySetInnerHTML={{ __html: DomPurifyHelper.instance.sanitize(this.props.contentTemplate) }}>
                 </div>;
             }
         };
@@ -153,7 +145,7 @@ export class PanelComponent extends React.Component<IPanelComponentProps, IPanel
                             this._onTogglePanel();
                         }
                     }}
-                    dangerouslySetInnerHTML={{ __html: this._domPurify.sanitize(this.props.openTemplate) }}>
+                    dangerouslySetInnerHTML={{ __html: DomPurifyHelper.instance.sanitize(this.props.openTemplate) }}>
                 </div>
             </Text>
             <Panel {...panelProps} />
@@ -215,9 +207,9 @@ export class PanelComponent extends React.Component<IPanelComponentProps, IPanel
         if (this.state.showPanel) {
             // Catch panel event
             // Because the panel is outside the component DOM elemnt itself, we need to catch the event at document level
-            document.addEventListener(ExtensibilityConstants.EVENT_FILTER_UPDATED, this._updateFilter);
+            document.addEventListener(ExtensibilityConstants.EVENT_FILTER_UPDATED, this._updateFilter as EventListener);
         } else {
-            document.removeEventListener(ExtensibilityConstants.EVENT_FILTER_UPDATED, this._updateFilter);
+            document.removeEventListener(ExtensibilityConstants.EVENT_FILTER_UPDATED, this._updateFilter as EventListener);
         }
     }
 
@@ -227,9 +219,9 @@ export class PanelComponent extends React.Component<IPanelComponentProps, IPanel
     private bindApplyFiltersEvents() {
 
         if (this.state.showPanel) {
-            document.addEventListener(ExtensibilityConstants.EVENT_FILTER_APPLY_ALL, this._applyAllFilters);
+            document.addEventListener(ExtensibilityConstants.EVENT_FILTER_APPLY_ALL, this._applyAllFilters as EventListener);
         } else {
-            document.removeEventListener(ExtensibilityConstants.EVENT_FILTER_APPLY_ALL, this._applyAllFilters);
+            document.removeEventListener(ExtensibilityConstants.EVENT_FILTER_APPLY_ALL, this._applyAllFilters as EventListener);
         }
     }
 
@@ -239,9 +231,9 @@ export class PanelComponent extends React.Component<IPanelComponentProps, IPanel
     private bindClearFiltersEvents() {
 
         if (this.state.showPanel) {
-            document.addEventListener(ExtensibilityConstants.EVENT_FILTER_CLEAR_ALL, this._clearAllFilters);
+            document.addEventListener(ExtensibilityConstants.EVENT_FILTER_CLEAR_ALL, this._clearAllFilters as EventListener);
         } else {
-            document.removeEventListener(ExtensibilityConstants.EVENT_FILTER_CLEAR_ALL, this._clearAllFilters);
+            document.removeEventListener(ExtensibilityConstants.EVENT_FILTER_CLEAR_ALL, this._clearAllFilters as EventListener);
         }
     }
 
@@ -250,9 +242,9 @@ export class PanelComponent extends React.Component<IPanelComponentProps, IPanel
      */
     private bindOperatorSelectionEvents() {
         if (this.state.showPanel) {
-            document.addEventListener(ExtensibilityConstants.EVENT_FILTER_VALUE_OPERATOR_UPDATED, this._updateFilterOperator);
+            document.addEventListener(ExtensibilityConstants.EVENT_FILTER_VALUE_OPERATOR_UPDATED, this._updateFilterOperator as EventListener);
         } else {
-            document.removeEventListener(ExtensibilityConstants.EVENT_FILTER_VALUE_OPERATOR_UPDATED, this._updateFilterOperator);
+            document.removeEventListener(ExtensibilityConstants.EVENT_FILTER_VALUE_OPERATOR_UPDATED, this._updateFilterOperator as EventListener);
         }
     }
 
@@ -262,6 +254,12 @@ export class PanelComponent extends React.Component<IPanelComponentProps, IPanel
 
         // Get the Web Part instance ID from where the event was fired so we can fire again this event but scoped to the Web Part
         const webPartInstanceId = ev.detail.instanceId;
+
+        // Only process the event if it belongs to this panel's web part instance
+        if (this.props.stateKey && webPartInstanceId !== this.props.stateKey) {
+            return;
+        }
+
         const webPartDomElement = window.document.querySelector(`div[data-instance-id="${webPartInstanceId}"]`);
 
         if (webPartDomElement) {
@@ -284,6 +282,12 @@ export class PanelComponent extends React.Component<IPanelComponentProps, IPanel
 
         // Get the Web Part instance ID from where the event was fired so we can fire again this event but scoped to the Web Part
         const webPartInstanceId = ev.detail.instanceId;
+
+        // Only process the event if it belongs to this panel's web part instance
+        if (this.props.stateKey && webPartInstanceId !== this.props.stateKey) {
+            return;
+        }
+
         const webPartDomElement = window.document.querySelector(`div[data-instance-id="${webPartInstanceId}"]`);
 
         if (webPartDomElement) {
@@ -307,6 +311,12 @@ export class PanelComponent extends React.Component<IPanelComponentProps, IPanel
         // Get the Web Part instance ID from where the event was fired so we can fire again this event but scoped to the Web Part
         // 'data-instance-id' is a custom managed attribute to uniquely identify the filter Web Part when the panel belongs to
         const webPartInstanceId = ev.detail.instanceId;
+
+        // Only process the event if it belongs to this panel's web part instance
+        if (this.props.stateKey && webPartInstanceId !== this.props.stateKey) {
+            return;
+        }
+
         const webPartDomElement = window.document.querySelector(`div[data-instance-id="${webPartInstanceId}"]`);
 
         const eventDetails = ev.detail as IDataFilterInfo;
@@ -336,6 +346,12 @@ export class PanelComponent extends React.Component<IPanelComponentProps, IPanel
 
         // Get the Web Part instance ID from where the event was fired so we can fire again this event but scoped to the Web Part
         const webPartInstanceId = ev.detail.instanceId;
+
+        // Only process the event if it belongs to this panel's web part instance
+        if (this.props.stateKey && webPartInstanceId !== this.props.stateKey) {
+            return;
+        }
+
         const webPartDomElement = window.document.querySelector(`div[data-instance-id="${webPartInstanceId}"]`);
 
         if (webPartDomElement) {

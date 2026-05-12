@@ -1,21 +1,16 @@
 "use client";
 import * as React from 'react';
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const Flickity = require('react-flickity-component');
-import 'flickity/dist/flickity.min.css';
 import * as ReactDOM from 'react-dom';
 import * as Handlebars from 'handlebars';
 import { MessageBar, MessageBarType } from '@fluentui/react/lib/MessageBar';
 import { BaseWebComponent } from '@pnp/modern-search-extensibility';
 import { isEmpty } from "@microsoft/sp-lodash-subset";
-// import * as DOMPurify from 'dompurify';
-
-import * as DOMPurify from "isomorphic-dompurify";
+import { Carousel, CarouselButtonsLocation, CarouselButtonsDisplay } from "@pnp/spfx-controls-react/lib/Carousel";
 import { ITemplateService } from '../services/templateService/ITemplateService';
 import { TemplateService } from '../services/templateService/TemplateService';
 import { DomPurifyHelper } from '../helpers/DomPurifyHelper';
 import { ServiceScope, ServiceKey } from "@microsoft/sp-core-library";
-import { Constants } from '../common/Constants';
+import styles from './SliderComponent.module.scss';
 
 export interface ISliderOptions {
 
@@ -83,20 +78,8 @@ export interface ISliderComponentState {
 
 export class SliderComponent extends React.Component<ISliderComponentProps, ISliderComponentState> {
 
-    private _domPurify: any;
-
     public constructor(props: ISliderComponentProps) {
         super(props);
-
-        this._domPurify = DOMPurify;
-
-        this._domPurify.setConfig({
-            WHOLE_DOCUMENT: true,
-            ALLOWED_URI_REGEXP: Constants.ALLOWED_URI_REGEXP,
-        });
-
-        this._domPurify.addHook('uponSanitizeElement', DomPurifyHelper.allowCustomComponentsHook);
-        this._domPurify.addHook('uponSanitizeAttribute', DomPurifyHelper.allowCustomAttributesHook);
     }
 
     public render() {
@@ -107,56 +90,84 @@ export class SliderComponent extends React.Component<ISliderComponentProps, ISli
             const sliderOptions = this.props.options ? this.props.options as ISliderOptions : {};
             const templateContext = !isEmpty(this.props.context) ? this.props.context : null;
 
-            let autoPlayValue: any = sliderOptions.autoPlay;
+            let autoPlayInterval: number | null = null;
 
             if (sliderOptions.autoPlay) {
                 // Check if a duration has been set
                 if (sliderOptions.autoPlayDuration) {
-                    autoPlayValue = sliderOptions.autoPlayDuration * 1000;
+                    autoPlayInterval = sliderOptions.autoPlayDuration * 1000;
                 }
             }
 
-            return <div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }} />
-                <Flickity
-                    options={{
-                        autoPlay: autoPlayValue,
-                        pauseAutoPlayOnHover: sliderOptions.pauseAutoPlayOnHover,
-                        wrapAround: sliderOptions.wrapAround,
-                        lazyLoad: true,
-                        groupCells: sliderOptions.numberOfSlides,
-                        adaptiveHeight: true,
-                        pageDots: sliderOptions.showPageDots,
-                        imagesLoaded: true
-                    }}
-                >
-                    {items.map((item, index) => {
+            // Get number of slides to show at once (default to 1 if not specified)
+            const numberOfSlides = sliderOptions.numberOfSlides || 1;
 
-                        // Create a temp context with the current so we can use global registered helpers on the current item
-                        const tempTemplateContent = `{{#with item as |item|}}${this.props.template.trim()}{{/with}}`;
+            // Group items into chunks based on numberOfSlides
+            const groupedItems: any[][] = [];
+            for (let i = 0; i < items.length; i += numberOfSlides) {
+                groupedItems.push(items.slice(i, i + numberOfSlides));
+            }
 
-                        let template = this.props.handlebars.compile(tempTemplateContent);
+            // Map grouped items to JSX elements for the Carousel
+            const carouselElements = groupedItems.map((itemGroup, groupIndex) => {
+                // Create slides for each item in the group
+                const slideElements = itemGroup.map((item, itemIndex) => {
+                    const absoluteIndex = groupIndex * numberOfSlides + itemIndex;
+                    
+                    // Create a temp context with the current so we can use global registered helpers on the current item
+                    const tempTemplateContent = `{{#with item as |item|}}${this.props.template.trim()}{{/with}}`;
 
-                        const templateContentValue = template(
-                            {
-                                item: item,
-                            },
-                            {
-                                data: {
-                                    root: {
-                                        ...templateContext
-                                    },
-                                    index: index
-                                }
+                    let template = this.props.handlebars.compile(tempTemplateContent);
+
+                    const templateContentValue = template(
+                        {
+                            item: item,
+                        },
+                        {
+                            data: {
+                                root: {
+                                    ...templateContext
+                                },
+                                index: absoluteIndex
                             }
-                        );
+                        }
+                    );
 
-                        return <div style={{ position: 'relative' }} key={index}>
-                            <div dangerouslySetInnerHTML={{ __html: this._domPurify.sanitize(templateContentValue) }}></div>
-                        </div>;
-                    })
+                    return <div key={absoluteIndex} className={styles.carouselSlide}>
+                        <div dangerouslySetInnerHTML={{ __html: DomPurifyHelper.instance.sanitize(templateContentValue) }}></div>
+                    </div>;
+                });
+
+                // Return a group container for multiple slides
+                return <div key={groupIndex} className={styles.carouselSlideGroup}>
+                    {slideElements}
+                </div>;
+            });
+
+            // Extract slideHeight and slideWidth from context (layout properties)
+            const slideHeight = templateContext?.properties?.layoutProperties?.slideHeight || 360;
+            const slideWidth = templateContext?.properties?.layoutProperties?.slideWidth || 318;
+
+            return <div 
+                className={styles.carouselContainer}
+                ref={(el) => {
+                    if (el) {
+                        el.style.setProperty('--slide-width', `${slideWidth}px`);
+                        el.style.setProperty('--slide-height', `${slideHeight}px`);
                     }
-                </Flickity>
+                }}
+            >
+                <Carousel
+                    element={carouselElements}
+                    isInfinite={sliderOptions.wrapAround}
+                    interval={autoPlayInterval}
+                    pauseOnHover={sliderOptions.pauseAutoPlayOnHover}
+                    indicators={sliderOptions.showPageDots}
+                    buttonsLocation={CarouselButtonsLocation.center}
+                    buttonsDisplay={CarouselButtonsDisplay.block}
+                    contentHeight={slideHeight}
+                    indicatorStyle={{ bottom: '5px' }}
+                />
             </div>;
         } catch (error) {
             return <MessageBar messageBarType={MessageBarType.error}>{error}</MessageBar>;

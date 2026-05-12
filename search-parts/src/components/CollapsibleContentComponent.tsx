@@ -5,10 +5,7 @@ import * as ReactDOM from 'react-dom';
 import { IGroup, IGroupDividerProps, Icon, Text, GroupedList, ITextProps, IStyleFunctionOrObject, ITextStyles } from '@fluentui/react';
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
 import styles from './CollapsibleContentComponent.module.scss';
-import 'core-js/features/dom-collections';
-// import * as DOMPurify from 'dompurify';
-import * as DOMPurify from "isomorphic-dompurify";
-import { Constants } from '../common/Constants';
+import { DomPurifyHelper } from '../helpers/DomPurifyHelper';
 
 export interface ICollapsibleContentComponentProps {
 
@@ -54,24 +51,65 @@ export interface ICollapsibleContentComponentState {
 export class CollapsibleContentComponent extends React.Component<ICollapsibleContentComponentProps, ICollapsibleContentComponentState> {
 
     private componentRef = React.createRef<HTMLDivElement>();
-    private _domPurify: any;
+    private storageKey: string;
 
     public constructor(props) {
         super(props);
 
+        // Create a unique storage key for this collapsible group
+        this.storageKey = `pnp-collapsible-${props.groupName}`;
+        
+        // Check if there's a stored state for this group
+        const storedState = sessionStorage.getItem(this.storageKey);
+        const defaultCollapsed = this.getNormalizedDefaultCollapsed(props.defaultCollapsed);
+        
+        // A forced-open state from the parent (selected filters or expandByDefault)
+        // must override any previously stored collapsed preference.
+        const initialCollapsedState = defaultCollapsed === false
+            ? false
+            : storedState
+                ? JSON.parse(storedState)
+            : !!defaultCollapsed;
+        
         this.state = {
-            isCollapsed: props.defaultCollapsed ? true : false,
+            isCollapsed: initialCollapsedState,
         };
 
         this._onRenderCell = this._onRenderCell.bind(this);
         this._onRenderHeader = this._onRenderHeader.bind(this);
         this._onTogglePanel = this._onTogglePanel.bind(this);
+    }
 
-        this._domPurify = DOMPurify;
-        this._domPurify.setConfig({
-            WHOLE_DOCUMENT: true,
-            ALLOWED_URI_REGEXP: Constants.ALLOWED_URI_REGEXP,
-        });
+    public componentDidUpdate(prevProps: ICollapsibleContentComponentProps) {
+        const defaultCollapsed = this.getNormalizedDefaultCollapsed(this.props.defaultCollapsed);
+        const prevDefaultCollapsed = this.getNormalizedDefaultCollapsed(prevProps.defaultCollapsed);
+
+        // If the parent indicates this panel should be open (selected filters or expandByDefault),
+        // force it open even if session storage previously remembered it as collapsed.
+        if (defaultCollapsed === false && (prevDefaultCollapsed !== defaultCollapsed || this.state.isCollapsed)) {
+            if (this.state.isCollapsed) {
+                sessionStorage.setItem(this.storageKey, JSON.stringify(false));
+                this.setState({
+                    isCollapsed: false
+                });
+            }
+        }
+    }
+
+    private getNormalizedDefaultCollapsed(defaultCollapsed: boolean | string | undefined): boolean | undefined {
+        if (defaultCollapsed === 'false') {
+            return false;
+        }
+
+        if (defaultCollapsed === 'true') {
+            return true;
+        }
+
+        if (typeof defaultCollapsed === 'boolean') {
+            return defaultCollapsed;
+        }
+
+        return undefined;
     }
 
 
@@ -91,7 +129,7 @@ export class CollapsibleContentComponent extends React.Component<ICollapsibleCon
 
         const groupedList = <GroupedList
             items={[
-                <div key={'template'} dangerouslySetInnerHTML={{ __html: this._domPurify.sanitize(this.props.contentTemplate) }}></div>
+                <div key={'template'} dangerouslySetInnerHTML={{ __html: DomPurifyHelper.instance.sanitize(this.props.contentTemplate) }}></div>
             ]}
             styles={{
                 root: {
@@ -112,7 +150,7 @@ export class CollapsibleContentComponent extends React.Component<ICollapsibleCon
                     onRenderFooter: ((props) => {
 
                         if (!props.group.isCollapsed) {
-                            return <div dangerouslySetInnerHTML={{ __html: this._domPurify.sanitize(this.props.footerTemplate) }}></div>;
+                            return <div dangerouslySetInnerHTML={{ __html: DomPurifyHelper.instance.sanitize(this.props.footerTemplate) }}></div>;
                         } else {
                             return null;
                         }
@@ -126,8 +164,13 @@ export class CollapsibleContentComponent extends React.Component<ICollapsibleCon
     }
 
     private _onTogglePanel(props: IGroupDividerProps) {
+        const newCollapsedState = !props.group.isCollapsed;
+        
+        // Store the user's preference in session storage
+        sessionStorage.setItem(this.storageKey, JSON.stringify(newCollapsedState));
+        
         this.setState({
-            isCollapsed: !props.group.isCollapsed
+            isCollapsed: newCollapsedState
         });
         props.onToggleCollapse(props.group);
     }
@@ -164,7 +207,7 @@ export class CollapsibleContentComponent extends React.Component<ICollapsibleCon
                     </div>
                 </div>
                 {!props.group.isCollapsed ?
-                    <div dangerouslySetInnerHTML={{ __html: this._domPurify.sanitize(this.props.headerTemplate) }}></div>
+                    <div dangerouslySetInnerHTML={{ __html: DomPurifyHelper.instance.sanitize(this.props.headerTemplate) }}></div>
                     :
                     null
                 }

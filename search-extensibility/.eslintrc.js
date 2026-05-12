@@ -10,5 +10,7 @@ module.exports = {
         "no-throw-literal": 0,
         "@typescript-eslint/no-empty-function": 0,
         "@typescript-eslint/no-unused-vars": 0,
+        '@rushstack/import-requires-chunk-name': 1,
+        '@rushstack/pair-react-dom-render-unmount': 1,
     },
 };

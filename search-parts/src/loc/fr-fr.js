@@ -97,8 +97,8 @@ define([], function () {
                 SearchPlaceholder: "Rechercher une valeur..."
             },
             CurrentVerticalNotSelectedMessage: "La verticale actuellement sélectionnée ne correspond pas à celles associées à ce composant WebPart ({0}). Il restera vide en mode d'affichage.",
-            True:"Oui",
-            False:"Non"
+            True: "Oui",
+            False: "Non"
         },
         DataSources: {
             SharePointSearch: {
@@ -129,7 +129,8 @@ define([], function () {
                 ApplyQueryTemplateBtnText: "Appliquer",
                 EnableAudienceTargetingTglLabel: "Permet de cibler l’auditoire",
                 TrimDuplicates: "Supprimer les doublons",
-                CollapseSpecificationLabel: "Réduire la spécification"
+                CollapseSpecificationLabel: "Réduire la spécification",
+                CacheTimeoutLabel: "Cache timeout in minutes (Set to 0 for no caching)"
             },
             MicrosoftSearch: {
                 QueryTextFieldLabel: "Texte de la requête",
@@ -194,7 +195,8 @@ define([], function () {
             TextFieldApplyButtonText: "Appliquer",
             SortByPlaceholderText: "Trier par...",
             SortByDefaultOptionText: "Défaut",
-            DownloadButtonText: "Télécharger"
+            DownloadButtonText: "Télécharger",
+            DownloadCSVButtonText: "Télécharger en CSV"
         },
         Layouts: {
             Debug: {
@@ -241,7 +243,8 @@ define([], function () {
                 ResetFieldsBtnLabel: "Rétablir la valeur par défaut dans les champs",
                 EnableStickyHeader: "Activer l’en-tête collant",
                 StickyHeaderListViewHeight: "Hauteur de la liste de détails (en pixels)",
-                EnableDownload: "Activer le téléchargement"
+                EnableDownload: "Activer le téléchargement",
+                UseAlternatingBackgroundColor: "Utiliser une couleur d'arrière-plan alternée"
             },
             Cards: {
                 Name: "Cartes",
@@ -303,6 +306,8 @@ define([], function () {
                 ShowPersonaCardOnHoverCalloutMsg: "Cette fonction utilise Microsoft Graph pour afficher des renseignements sur l’utilisateur et nécessite les autorisations API suivantes pour que votre utilisateur puisse travailler : [« User.Read », « People.Read », « Contacts.Read », « User.Read.All »].",
                 ShowPersonaPresenceInfo: "Afficher la présence",
                 ShowPersonaPresenceInfoCalloutMsg: "Pour fonctionner, cette fonctionnalité nécessite les autorisations API suivantes dans votre locataire : ['Presence.Read.All']",
+                ShowHoverOnPictureOnly: "Afficher le survol uniquement sur l'image",
+                ShowHoverOnPictureOnlyCalloutMsg: "Lorsqu'activé, la carte de personne s'ouvre uniquement lors du survol de l'image persona (pièce).",
                 Fields: {
                     ImageUrl: "URL de l’image",
                     PrimaryText: "Texte principal",
@@ -339,48 +344,48 @@ define([], function () {
                 }
             },
             PersonCard: {
-              SendEmailLinkSubtitle: "Envoyer un e-mail",
-              StartChatLinkSubtitle: "Démarrer une discussion",
-              ShowMoreSectionButton: "Afficher plus",
-              ContactSectionTitle: "Contact",
-              ReportsToSectionTitle: "Rend compte à",
-              DirectReportsSectionTitle: "Subordonnés directs",
-              OrganizationSectionTitle: "Organisation",
-              YouWorkWithSubSectionTitle: "Vous travaillez avec",
-              UserWorksWithSubSectionTitle: "travaille avec",
-              EmailsSectionTitle: "E-mails",
-              FilesSectionTitle: "Fichiers",
-              SharedTextSubtitle: "Partagé",
-              SkillsAndExperienceSectionTitle: "Compétences et Expérience",
-              AboutCompactSectionTitle: "À propos",
-              SkillsSubSectionTitle: "Compétences",
-              LanguagesSubSectionTitle: "Langues",
-              WorkExperienceSubSectionTitle: "Expérience professionnelle",
-              EducationSubSectionTitle: "Formation",
-              ProfessionalInterestsSubSectionTitle: "Intérêts professionnels",
-              PersonalInterestsSubSectionTitle: "Intérêts personnels",
-              BirthdaySubSectionTitle: "Anniversaire",
-              CurrentYearSubtitle: "Actuel",
-              EndOfCard: "Fin de la carte",
-              QuickMessage: "Envoyer un message rapide",
-              ExpandDetailsLabel: "Développer les détails",
-              SendMessageLabel: "Envoyer un message",
-              EmailButtonLabel: "E-mail",
-              CallButtonLabel: "Appeler",
-              ChatButtonLabel: "Discuter",
-              CloseCardLabel: "Fermer la carte",
-              VideoButtonLabel: "Vidéo",
-              GoBackLabel: "Retour",
-              EmailTitle: "E-mail",
-              ChatTitle: "Teams",
-              BusinessPhoneTitle: "Téléphone professionnel",
-              CellPhoneTitle: "Téléphone portable",
-              DepartmentTitle: "Département",
-              PersonTitle: "Titre",
-              OfficeLocationTitle: "Emplacement du bureau",
-              CopyToClipboardButton: "Copier dans le presse-papiers",
-              ShowMoreSubtitle: "Afficher plus d'éléments",
-              SocialMediaSubSectionTitle: "Médias sociaux"
+                SendEmailLinkSubtitle: "Envoyer un e-mail",
+                StartChatLinkSubtitle: "Démarrer une discussion",
+                ShowMoreSectionButton: "Afficher plus",
+                ContactSectionTitle: "Contact",
+                ReportsToSectionTitle: "Rend compte à",
+                DirectReportsSectionTitle: "Subordonnés directs",
+                OrganizationSectionTitle: "Organisation",
+                YouWorkWithSubSectionTitle: "Vous travaillez avec",
+                UserWorksWithSubSectionTitle: "travaille avec",
+                EmailsSectionTitle: "E-mails",
+                FilesSectionTitle: "Fichiers",
+                SharedTextSubtitle: "Partagé",
+                SkillsAndExperienceSectionTitle: "Compétences et Expérience",
+                AboutCompactSectionTitle: "À propos",
+                SkillsSubSectionTitle: "Compétences",
+                LanguagesSubSectionTitle: "Langues",
+                WorkExperienceSubSectionTitle: "Expérience professionnelle",
+                EducationSubSectionTitle: "Formation",
+                ProfessionalInterestsSubSectionTitle: "Intérêts professionnels",
+                PersonalInterestsSubSectionTitle: "Intérêts personnels",
+                BirthdaySubSectionTitle: "Anniversaire",
+                CurrentYearSubtitle: "Actuel",
+                EndOfCard: "Fin de la carte",
+                QuickMessage: "Envoyer un message rapide",
+                ExpandDetailsLabel: "Développer les détails",
+                SendMessageLabel: "Envoyer un message",
+                EmailButtonLabel: "E-mail",
+                CallButtonLabel: "Appeler",
+                ChatButtonLabel: "Discuter",
+                CloseCardLabel: "Fermer la carte",
+                VideoButtonLabel: "Vidéo",
+                GoBackLabel: "Retour",
+                EmailTitle: "E-mail",
+                ChatTitle: "Teams",
+                BusinessPhoneTitle: "Téléphone professionnel",
+                CellPhoneTitle: "Téléphone portable",
+                DepartmentTitle: "Département",
+                PersonTitle: "Titre",
+                OfficeLocationTitle: "Emplacement du bureau",
+                CopyToClipboardButton: "Copier dans le presse-papiers",
+                ShowMoreSubtitle: "Afficher plus d'éléments",
+                SocialMediaSubSectionTitle: "Médias sociaux"
             }
         },
         HandlebarsHelpers: {
@@ -405,7 +410,19 @@ define([], function () {
                     }
                 },
                 ImportExport: "Paramètres d'importation/exportation"
-            }
+            },
+            AudienceTargeting: {
+                GroupName: "Ciblage d'audience",
+                TargetAudienceLabel: "Audience cible",
+                CacheDurationLabel: "Durée du cache (heures)",
+                CacheDurationDescription: "Durée en heures pour la mise en cache des informations d'appartenance à l'audience"
+            },
+            TitleFontDefault: "par défaut",
+            TitleStylingGroupName: "Style du titre du composant WebPart",
+            TitleFont: "Police du titre",
+            TitleFontSize: "Taille de la police du titre (px)",
+            TitleFontColor: "Couleur de la police du titre",
+            ResetTitleStylingToDefault: "Réinitialiser le style du titre par défaut"
         },
         Filters: {
             ApplyAllFiltersButtonLabel: "Appliquer",
@@ -416,7 +433,9 @@ define([], function () {
             ComboBoxPlaceHolder: "Choisir une valeur",
             UseAndOperatorValues: "Utiliser l'opérateur ET entre les valeurs",
             UseOrOperatorValues: "Utiliser l'opérateur OU entre les valeurs",
-            UseValuesOperators: "Sélectionne l'opérateur à utiliser entre les valeurs de ce filtre"
+            UseValuesOperators: "Sélectionne l'opérateur à utiliser entre les valeurs de ce filtre",
+            LoadingMessage: "Chargement...",
+            SearchPlaceholder: "Rechercher..."
         },
         SuggestionProviders: {
             SharePointStatic: {

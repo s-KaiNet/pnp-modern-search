@@ -25,9 +25,9 @@ export interface IFilterDateRangeComponentProps {
     onUpdate: (filterValues: IDataFilterValueInfo[]) => void;
 
     /**
-     * The moment.js library reference
+     * The dayjs library reference
      */
-    moment: any;
+    dayjs: any;
 }
 
 export interface IFilterDateRangeComponentState {
@@ -68,22 +68,34 @@ export class FilterDateRangeComponent extends React.Component<IFilterDateRangeCo
                     selectors: {
                         input: {
                             backgroundColor: this.props.themeVariant.semanticColors.bodyBackground,
-                            color: this.props.themeVariant.semanticColors.bodyText                          
-                            
+                            color: this.props.themeVariant.semanticColors.bodyText
+
 
                         },
                         'input::placeholder': {
                             color: this.props.themeVariant.semanticColors.bodyText
                         }
                     }
-                },
-                icon: 
-                {
-                    pointerEvents: 'none'
                 }
             };
 
             return customStyles;
+        };
+
+        const calloutProps = {
+            setInitialFocus: false,
+            popupProps: {
+                onRestoreFocus: (params) => {
+                    const originalElement = params?.originalElement as HTMLElement;
+                    if (originalElement?.focus) {
+                        try {
+                            originalElement.focus({ preventScroll: true });
+                        } catch {
+                            originalElement.focus();
+                        }
+                    }
+                }
+            }
         };
 
         const fromProps: IDatePickerProps = {
@@ -96,7 +108,8 @@ export class FilterDateRangeComponent extends React.Component<IFilterDateRangeCo
             theme: this.props.themeVariant as ITheme,
             strings: strings.General.DatePickerStrings,
             formatDate: this._onFormatDate,
-            allowTextInput: true
+            allowTextInput: true,
+            calloutProps: calloutProps
         };
 
         let toProps: IDatePickerProps = {
@@ -109,7 +122,8 @@ export class FilterDateRangeComponent extends React.Component<IFilterDateRangeCo
             borderless: true,
             strings: strings.General.DatePickerStrings,
             formatDate: this._onFormatDate,
-            allowTextInput: true
+            allowTextInput: true,
+            calloutProps: calloutProps
         };
 
         if (this.state.selectedFromDate) {
@@ -158,11 +172,19 @@ export class FilterDateRangeComponent extends React.Component<IFilterDateRangeCo
 
     private _updateFromDate(fromDate: Date) {
 
-        this.setState({
-            selectedFromDate: fromDate
-        });
+        // Only update if the date actually changed to prevent unnecessary re-renders
+        const currentDate = this.state.selectedFromDate;
+        const dateChanged = (!currentDate && fromDate) ||
+            (currentDate && !fromDate) ||
+            (currentDate && fromDate && currentDate.getTime() !== fromDate.getTime());
 
-        this._updateFilter(fromDate, this.state.selectedToDate, true);
+        if (dateChanged) {
+            this.setState({
+                selectedFromDate: fromDate
+            });
+
+            this._updateFilter(fromDate, this.state.selectedToDate, true);
+        }
     }
 
     private _updateToDate(toDate: Date) {
@@ -171,11 +193,19 @@ export class FilterDateRangeComponent extends React.Component<IFilterDateRangeCo
             toDate.setHours(23, 59, 59, 999);
         }
 
-        this.setState({
-            selectedToDate: toDate
-        });
+        // Only update if the date actually changed to prevent unnecessary re-renders
+        const currentDate = this.state.selectedToDate;
+        const dateChanged = (!currentDate && toDate) ||
+            (currentDate && !toDate) ||
+            (currentDate && toDate && currentDate.getTime() !== toDate.getTime());
 
-        this._updateFilter(this.state.selectedFromDate, toDate, true);
+        if (dateChanged) {
+            this.setState({
+                selectedToDate: toDate
+            });
+
+            this._updateFilter(this.state.selectedFromDate, toDate, true);
+        }
     }
 
     private _updateFilter(selectedFromDate: Date, selectedToDate: Date, selected: boolean) {
@@ -218,7 +248,7 @@ export class FilterDateRangeComponent extends React.Component<IFilterDateRangeCo
     }
 
     private _onFormatDate(date: Date): string {
-        return this.props.moment(date).format('LL');
+        return this.props.dayjs(date).format('LL');
     }
 }
 
@@ -231,7 +261,7 @@ export class FilterDateRangeWebComponent extends BaseWebComponent {
     public async connectedCallback() {
 
         const dateHelper = this._serviceScope.consume<DateHelper>(DateHelper.ServiceKey);
-        const moment = await dateHelper.moment();
+        const dayjs = await dateHelper.moment();
 
         let props = this.resolveAttributes();
         let renderDateRange: JSX.Element = null;
@@ -239,7 +269,7 @@ export class FilterDateRangeWebComponent extends BaseWebComponent {
         if (props.filter) {
 
             const filter = props.filter as IDataFilterInternal;
-            renderDateRange = <FilterDateRangeComponent {...props} moment={moment} filter={filter} onUpdate={((filterValues: IDataFilterValueInfo[]) => {
+            renderDateRange = <FilterDateRangeComponent {...props} dayjs={dayjs} filter={filter} onUpdate={((filterValues: IDataFilterValueInfo[]) => {
 
                 // Unselect all previous values
                 const updatedValues = filter.values.map(value => {

@@ -1,4 +1,4 @@
-define([], function() {
+define([], function () {
     return {
         Tokens: {
             SelectTokenLabel: "Vælg token...",
@@ -129,8 +129,8 @@ define([], function() {
                 ApplyQueryTemplateBtnText: "Anvend",
                 EnableAudienceTargetingTglLabel: "Aktivér målgruppestyring",
                 TrimDuplicates: "Trim dubletter",
-                CollapseSpecificationLabel: "Skjul specifikation"
-            
+                CollapseSpecificationLabel: "Skjul specifikation",
+                CacheTimeoutLabel: "Cache timeout in minutes (Set to 0 for no caching)"
             },
             MicrosoftSearch: {
                 QueryTextFieldLabel: "Forespørgselstekst",
@@ -195,7 +195,8 @@ define([], function() {
             TextFieldApplyButtonText: "Anvend",
             SortByPlaceholderText: "Sorter efter...",
             SortByDefaultOptionText: "Standard",
-            DownloadButtonText: "Download"
+            DownloadButtonText: "Download",
+            DownloadCSVButtonText: "Download som CSV"
         },
         Layouts: {
             Debug: {
@@ -242,7 +243,8 @@ define([], function() {
                 ResetFieldsBtnLabel: "Nulstil felter til standardværdier",
                 EnableStickyHeader: "Aktivér fastgjort header",
                 StickyHeaderListViewHeight: "Listevisningshøjde (px)",
-                EnableDownload: "Aktivér download"
+                EnableDownload: "Aktivér download",
+                UseAlternatingBackgroundColor: "Vis skiftende baggrundsfarve"
             },
             Cards: {
                 Name: "Cards",
@@ -304,6 +306,8 @@ define([], function() {
                 ShowPersonaCardOnHoverCalloutMsg: "Denne feature bruger Microsoft Graph til at vise information om brugeren og skal bruge de følgende API-tilladelser i din tenant, for at det virker: ['User.Read','People.Read','Contacts.Read','User.Read.All'].",
                 ShowPersonaPresenceInfo: "Vis tilstedeværelse",
                 ShowPersonaPresenceInfoCalloutMsg: "Denne funktion kræver følgende API-tilladelser i din tenant for at fungere: ['Presence.Read.All']",
+                ShowHoverOnPictureOnly: "Vis hover kun på billedet",
+                ShowHoverOnPictureOnlyCalloutMsg: "Når aktiveret, åbnes personkortet kun ved at holde markøren over persona-billedet (mønt).",
                 Fields: {
                     ImageUrl: "Billede-URL",
                     PrimaryText: "Primær tekst",
@@ -340,48 +344,48 @@ define([], function() {
                 }
             },
             PersonCard: {
-              SendEmailLinkSubtitle: "Send e-mail",
-              StartChatLinkSubtitle: "Start chat",
-              ShowMoreSectionButton: "Vis mere",
-              ContactSectionTitle: "Kontakt",
-              ReportsToSectionTitle: "Rapporterer til",
-              DirectReportsSectionTitle: "Direkte underordnede",
-              OrganizationSectionTitle: "Organisation",
-              YouWorkWithSubSectionTitle: "Du arbejder med",
-              UserWorksWithSubSectionTitle: "arbejder med",
-              EmailsSectionTitle: "E-mails",
-              FilesSectionTitle: "Filer",
-              SharedTextSubtitle: "Delt",
-              SkillsAndExperienceSectionTitle: "Færdigheder & Erfaring",
-              AboutCompactSectionTitle: "Om",
-              SkillsSubSectionTitle: "Færdigheder",
-              LanguagesSubSectionTitle: "Sprog",
-              WorkExperienceSubSectionTitle: "Arbejdserfaring",
-              EducationSubSectionTitle: "Uddannelse",
-              ProfessionalInterestsSubSectionTitle: "Professionelle interesser",
-              PersonalInterestsSubSectionTitle: "Personlige interesser",
-              BirthdaySubSectionTitle: "Fødselsdag",
-              CurrentYearSubtitle: "Nuværende",
-              EndOfCard: "Slut på kortet",
-              QuickMessage: "Send en hurtig besked",
-              ExpandDetailsLabel: "Udvid detaljer",
-              SendMessageLabel: "Send besked",
-              EmailButtonLabel: "E-mail",
-              CallButtonLabel: "Ring",
-              ChatButtonLabel: "Chat",
-              CloseCardLabel: "Luk kort",
-              VideoButtonLabel: "Video",
-              GoBackLabel: "Gå tilbage",
-              EmailTitle: "E-mail",
-              ChatTitle: "Teams",
-              BusinessPhoneTitle: "Arbejdstelefon",
-              CellPhoneTitle: "Mobiltelefon",
-              DepartmentTitle: "Afdeling",
-              PersonTitle: "Titel",
-              OfficeLocationTitle: "Kontorplacering",
-              CopyToClipboardButton: "Kopier til udklipsholder",
-              ShowMoreSubtitle: "Vis flere elementer",
-              SocialMediaSubSectionTitle: "Sociale medier"
+                SendEmailLinkSubtitle: "Send e-mail",
+                StartChatLinkSubtitle: "Start chat",
+                ShowMoreSectionButton: "Vis mere",
+                ContactSectionTitle: "Kontakt",
+                ReportsToSectionTitle: "Rapporterer til",
+                DirectReportsSectionTitle: "Direkte underordnede",
+                OrganizationSectionTitle: "Organisation",
+                YouWorkWithSubSectionTitle: "Du arbejder med",
+                UserWorksWithSubSectionTitle: "arbejder med",
+                EmailsSectionTitle: "E-mails",
+                FilesSectionTitle: "Filer",
+                SharedTextSubtitle: "Delt",
+                SkillsAndExperienceSectionTitle: "Færdigheder & Erfaring",
+                AboutCompactSectionTitle: "Om",
+                SkillsSubSectionTitle: "Færdigheder",
+                LanguagesSubSectionTitle: "Sprog",
+                WorkExperienceSubSectionTitle: "Arbejdserfaring",
+                EducationSubSectionTitle: "Uddannelse",
+                ProfessionalInterestsSubSectionTitle: "Professionelle interesser",
+                PersonalInterestsSubSectionTitle: "Personlige interesser",
+                BirthdaySubSectionTitle: "Fødselsdag",
+                CurrentYearSubtitle: "Nuværende",
+                EndOfCard: "Slut på kortet",
+                QuickMessage: "Send en hurtig besked",
+                ExpandDetailsLabel: "Udvid detaljer",
+                SendMessageLabel: "Send besked",
+                EmailButtonLabel: "E-mail",
+                CallButtonLabel: "Ring",
+                ChatButtonLabel: "Chat",
+                CloseCardLabel: "Luk kort",
+                VideoButtonLabel: "Video",
+                GoBackLabel: "Gå tilbage",
+                EmailTitle: "E-mail",
+                ChatTitle: "Teams",
+                BusinessPhoneTitle: "Arbejdstelefon",
+                CellPhoneTitle: "Mobiltelefon",
+                DepartmentTitle: "Afdeling",
+                PersonTitle: "Titel",
+                OfficeLocationTitle: "Kontorplacering",
+                CopyToClipboardButton: "Kopier til udklipsholder",
+                ShowMoreSubtitle: "Vis flere elementer",
+                SocialMediaSubSectionTitle: "Sociale medier"
             }
         },
         HandlebarsHelpers: {
@@ -406,7 +410,19 @@ define([], function() {
                     }
                 },
                 ImportExport: "Indstillinger for import/eksport"
-            }
+            },
+            AudienceTargeting: {
+                GroupName: "Målgruppestyring",
+                TargetAudienceLabel: "Målgruppe",
+                CacheDurationLabel: "Cache-varighed (timer)",
+                CacheDurationDescription: "Varighed i timer for caching af målgruppemedlemskab"
+            },
+            TitleFontDefault: "standard",
+            TitleStylingGroupName: "Webdel titelstyling",
+            TitleFont: "Titelskrifttype",
+            TitleFontSize: "Titelskriftstørrelse (px)",
+            TitleFontColor: "Titelskriftfarve",
+            ResetTitleStylingToDefault: "Nulstil titelstyling til standard"
         },
         Filters: {
             ApplyAllFiltersButtonLabel: "Anvend",
@@ -417,7 +433,9 @@ define([], function() {
             ComboBoxPlaceHolder: "Vælg værdi",
             UseAndOperatorValues: "Brug en AND operator imellem værdierne",
             UseOrOperatorValues: "Brug en OR operator imellem værdierne",
-            UseValuesOperators: "Vælg en operator for disse filter værdier"
+            UseValuesOperators: "Vælg en operator for disse filter værdier",
+            LoadingMessage: "Indlæser...",
+            SearchPlaceholder: "Søg..."
         },
         SuggestionProviders: {
             SharePointStatic: {

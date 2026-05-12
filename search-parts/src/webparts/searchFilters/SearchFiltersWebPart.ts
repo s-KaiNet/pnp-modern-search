@@ -10,7 +10,11 @@ import {
     PropertyPaneToggle,
     PropertyPaneDropdown,
     PropertyPaneHorizontalRule,
+    PropertyPaneSlider,
+    PropertyPaneButton,
+    PropertyPaneButtonType
 } from '@microsoft/sp-property-pane';
+import { PropertyFieldColorPicker, PropertyFieldColorPickerStyle } from '@pnp/spfx-property-controls/lib/PropertyFieldColorPicker';
 import { DynamicProperty } from '@microsoft/sp-component-base';
 import { IPropertyPanePage } from '@microsoft/sp-property-pane';
 import * as webPartStrings from 'SearchFiltersWebPartStrings';
@@ -32,7 +36,6 @@ import { LayoutHelper } from '../../helpers/LayoutHelper';
 import { TemplateService } from '../../services/templateService/TemplateService';
 import { FileFormat, ITemplateService } from '../../services/templateService/ITemplateService';
 import { isEmpty, isEqual, uniqBy, cloneDeep, uniq, sortBy } from '@microsoft/sp-lodash-subset';
-import { Dropdown, IDropdownProps, IDropdownOption, Checkbox, IComboBoxOption, MessageBar, MessageBarType } from '@fluentui/react';
 import { BuiltinFilterTemplates, BuiltinFilterTypes } from '../../layouts/AvailableTemplates';
 import { ServiceScope } from '@microsoft/sp-core-library';
 import { AvailableComponents } from '../../components/AvailableComponents';
@@ -42,8 +45,31 @@ import commonStyles from '../../styles/Common.module.scss';
 import { IDataVerticalSourceData } from '../../models/dynamicData/IDataVerticalSourceData';
 import { DynamicPropertyHelper } from '../../helpers/DynamicPropertyHelper';
 import PnPTelemetry from '@pnp/telemetry-js';
+import { MessageBar, MessageBarType } from '@fluentui/react/lib/MessageBar';
+import { IComboBoxOption } from '@fluentui/react/lib/ComboBox';
+import { Checkbox } from '@fluentui/react/lib/Checkbox';
+import { ITaxonomyService } from '../../services/taxonomyService/ITaxonomyService';
+import { TaxonomyService } from '../../services/taxonomyService/TaxonomyService';
+import { Dropdown, IDropdownOption, IDropdownProps } from '@fluentui/react/lib/Dropdown';
+import { TextField } from '@fluentui/react/lib/TextField';
 
 const LogSource = "SearchFiltersWebPart";
+
+interface IHierarchicalFilterConfiguration extends IDataFilterConfiguration {
+    termSetId?: string;
+    termGroupId?: string;
+    cacheDuration?: number;
+}
+
+/**
+ * Transient UI state used by the hierarchical settings custom property pane renderer.
+ */
+interface IHierarchicalSettingsUiState {
+    showModal: boolean;
+    searchText: string;
+    expandedGroups: Set<string>;
+    cacheMessage: string;
+}
 
 export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebPartProps> implements IDynamicDataCallables {
 
@@ -85,6 +111,11 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
     private templateService: ITemplateService = undefined;
 
     /**
+     * The taxonomy service instance
+     */
+    private taxonomyService: ITaxonomyService = undefined;
+
+    /**
      * the dynamic data service instance
      */
     private dynamicDataService: IDynamicDataService;
@@ -109,6 +140,12 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
      */
     private propertyPaneConnectionsFields: IPropertyPaneField<any>[] = [];
 
+    /**
+     * Cached grouped term sets: map of groupId -> array of term sets in that group
+     */
+    private readonly groupedTermSets: Map<string, Array<{ id: string, name: string, groupId: string, groupName: string }>> = new Map();
+    private readonly hierarchicalSettingsUiStateByItemId: Map<string, IHierarchicalSettingsUiState> = new Map();
+
     constructor() {
         super();
         this._updateTitleProperty = this._updateTitleProperty.bind(this);
@@ -117,6 +154,49 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
     private _updateTitleProperty(value: string) {
         this.properties.title = value;
         this.renderCompleted();
+    }
+
+    private async _loadTermSets(): Promise<void> {
+        try {
+            if (!this.taxonomyService || !this.context?.pageContext) {
+                return;
+            }
+
+            const termSets = await this.taxonomyService.getTermSets(this.context.pageContext.web.absoluteUrl);
+
+            this.groupedTermSets.clear();
+            for (const ts of termSets) {
+                if (!this.groupedTermSets.has(ts.groupId)) {
+                    this.groupedTermSets.set(ts.groupId, []);
+                }
+                const groupedTerms = this.groupedTermSets.get(ts.groupId);
+                if (groupedTerms) {
+                    groupedTerms.push(ts);
+                }
+            }
+        } catch (error) {
+            Log.error(LogSource, new Error(`Error loading term sets: ${error}`));
+        }
+    }
+
+    /**
+     * Gets (or creates) the transient property pane UI state for a hierarchical filter item.
+     */
+    private getHierarchicalSettingsUiState(itemId: string | number): IHierarchicalSettingsUiState {
+        const stateKey = `${this.instanceId}_${String(itemId)}`;
+        let uiState = this.hierarchicalSettingsUiStateByItemId.get(stateKey);
+
+        if (!uiState) {
+            uiState = {
+                showModal: false,
+                searchText: '',
+                expandedGroups: new Set<string>(),
+                cacheMessage: ''
+            };
+            this.hierarchicalSettingsUiStateByItemId.set(stateKey, uiState);
+        }
+
+        return uiState;
     }
     protected async onInit() {
         try {
@@ -159,6 +239,16 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
 
     public async render(): Promise<void> {
 
+        // Check audience targeting - if user is not in audience, don't render
+        const isInAudience = await this.isInAudience();
+        this._isHiddenByAudience = !isInAudience;
+        if (!isInAudience) {
+            // eslint-disable-next-line @rushstack/pair-react-dom-render-unmount -- cleanup on audience hide, paired with onDispose
+            ReactDom.unmountComponentAtNode(this.domElement);
+            this.domElement.innerHTML = '';
+            return this.renderCompleted();
+        }
+
         // Determine the template content to display
         // In the case of an external template is selected, the render is done asynchronously waiting for the content to be fetched
         await this.initTemplate();
@@ -178,6 +268,12 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
     }
 
     protected renderCompleted(): void {
+
+        // If hidden by audience targeting, skip rendering and just mark as completed
+        if (this._isHiddenByAudience) {
+            super.renderCompleted();
+            return;
+        }
 
         let renderRootElement: JSX.Element = null;
         let filterResults: IDataFilterResult[] = [];
@@ -212,6 +308,7 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                     selectedLayoutKey: this.properties.selectedLayoutKey,
                     properties: JSON.parse(JSON.stringify(this.properties)),
                     themeVariant: this._themeVariant,
+                    context: this.context,
                     onUpdateFilters: (updatedFilters: IDataFilter[]) => {
 
                         this._selectedFilters = updatedFilters;
@@ -220,12 +317,19 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                         this.context.dynamicDataSourceManager.notifyPropertyChanged(ComponentType.SearchFilters);
                     },
                     templateService: this.templateService,
+                    taxonomyService: this.taxonomyService,
                     webPartTitleProps: {
                         displayMode: this.displayMode,
                         title: this.properties.title,
                         updateProperty: this._updateTitleProperty,
                         className: commonStyles.wpTitle
-                    }
+                    },
+                    filterBackgroundColor: this.properties.filterBackgroundColor,
+                    filterBorderColor: this.properties.filterBorderColor,
+                    filterBorderThickness: this.properties.filterBorderThickness,
+                    titleFont: this.properties.titleFont,
+                    titleFontSize: this.properties.titleFontSize,
+                    titleFontColor: this.properties.titleFontColor
                 } as ISearchFiltersContainerProps
             );
 
@@ -300,6 +404,7 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
             }
         }
 
+        // eslint-disable-next-line @rushstack/pair-react-dom-render-unmount -- render is paired with unmount in onDispose
         ReactDom.render(renderRootElement, this.domElement);
 
         // This call set this.renderedOnce to 'true' so we need to execute it at the very end
@@ -341,6 +446,8 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
     }
 
     protected onDispose(): void {
+        this.hierarchicalSettingsUiStateByItemId.clear();
+        // eslint-disable-next-line @rushstack/pair-react-dom-render-unmount -- paired with render in renderCompleted
         ReactDom.unmountComponentAtNode(this.domElement);
     }
 
@@ -378,6 +485,7 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                 displayGroupsAsAccordion: true,
                 groups: [
                     ...this.getPropertyPaneWebPartInfoGroups(),
+                    this.getAudienceTargetingPropertyPaneGroup(),
                     {
                         groupName: commonStrings.PropertyPane.InformationPage.ImportExport,
                         groupFields: [this._propertyPanePropertyEditor({
@@ -396,6 +504,10 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
 
     protected async onPropertyPaneConfigurationStart() {
         await this.loadPropertyPaneResources();
+
+        if (this.groupedTermSets.size === 0) {
+            await this._loadTermSets();
+        }
     }
 
     protected async onPropertyPaneFieldChanged(propertyPath: string, oldValue: any, newValue: any): Promise<void> {
@@ -406,15 +518,21 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
             this.properties.filtersConfiguration = uniqBy(this.properties.filtersConfiguration, 'filterName');
 
             // Set correct default values according to the template
-            this.properties.filtersConfiguration = (newValue as IDataFilterConfiguration[]).map(configuration => {
+            const nextConfigurations = newValue as IHierarchicalFilterConfiguration[];
+            this.properties.filtersConfiguration = nextConfigurations.map(configuration => {
                 if (configuration.selectedTemplate === BuiltinFilterTemplates.DateRange
                     || configuration.selectedTemplate === BuiltinFilterTemplates.DateInterval) {
                     configuration.isMulti = false;
                     configuration.operator = FilterConditionOperator.AND;
                 }
 
-                // Set the correct type according to the filter tempalte
-                configuration.type = BuiltinFilterTypes[configuration.selectedTemplate];
+                // Preserve hierarchical settings set through custom fields.
+                const correspondingNewConfig = nextConfigurations.find(c => c.filterName === configuration.filterName);
+                if (correspondingNewConfig) {
+                    configuration.termSetId = correspondingNewConfig.termSetId;
+                    configuration.termGroupId = correspondingNewConfig.termGroupId;
+                    configuration.cacheDuration = correspondingNewConfig.cacheDuration;
+                }
 
                 return configuration;
             });
@@ -500,10 +618,11 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                 textDisplayValue: textDisplayValues.join(','),
                 label: webPartStrings.PropertyPane.ConnectionsPage.UseDataResultsFromComponentsLabel,
                 description: webPartStrings.PropertyPane.ConnectionsPage.UseDataResultsFromComponentsDescription,
-                onPropertyChange: (propertyPath, newValue: IComboBoxOption[], changeCallback?: (targetProperty?: string, newValue?: any) => void) => {
+                onPropertyChange: (propertyPath, newValue: IComboBoxOption | IComboBoxOption[], changeCallback?: (targetProperty?: string, newValue?: any) => void) => {
 
                     // Persist the new data sources references
-                    changeCallback(propertyPath, newValue.map(option => option.key as string));
+                    const values = Array.isArray(newValue) ? newValue : [newValue];
+                    changeCallback(propertyPath, values.map(option => option.key as string));
                     this.ensureDynamicDataSourcesConnection();
 
                     // Refresh the property pane for available fields
@@ -573,6 +692,55 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
             }
         ];
 
+        // Add styling options group
+        groups.push({
+            groupName: webPartStrings.Styling.StylingOptionsGroupName,
+            isCollapsed: true,
+            groupFields: [
+                PropertyFieldColorPicker('filterBackgroundColor', {
+                    label: webPartStrings.Styling.FilterBackgroundColorLabel,
+                    selectedColor: this.properties.filterBackgroundColor,
+                    onPropertyChange: this.onPropertyPaneFieldChanged,
+                    properties: this.properties,
+                    disabled: false,
+                    debounce: 1000,
+                    isHidden: false,
+                    alphaSliderHidden: false,
+                    style: PropertyFieldColorPickerStyle.Inline,
+                    key: 'filterBackgroundColorFieldId'
+                }),
+                PropertyFieldColorPicker('filterBorderColor', {
+                    label: webPartStrings.Styling.FilterBorderColorLabel,
+                    selectedColor: this.properties.filterBorderColor,
+                    onPropertyChange: this.onPropertyPaneFieldChanged,
+                    properties: this.properties,
+                    disabled: false,
+                    debounce: 1000,
+                    isHidden: false,
+                    alphaSliderHidden: false,
+                    style: PropertyFieldColorPickerStyle.Inline,
+                    key: 'filterBorderColorFieldId'
+                }),
+                PropertyPaneSlider('filterBorderThickness', {
+                    label: webPartStrings.Styling.FilterBorderThicknessLabel,
+                    min: 0,
+                    max: 10,
+                    step: 1,
+                    showValue: true,
+                    value: this.properties.filterBorderThickness || 0
+                }),
+                PropertyPaneButton('resetContentStylingButton', {
+                    text: webPartStrings.Styling.ResetToDefaultLabel,
+                    buttonType: PropertyPaneButtonType.Command,
+                    icon: 'Refresh',
+                    onClick: this._resetContentStylingToDefault.bind(this)
+                })
+            ]
+        });
+
+        // Add web part title styling group
+        groups.push(this.getTitleStylingPropertyPaneGroup());
+
         // Add template options if any
         const layoutOptions = this.getLayoutTemplateOptions();
         if (layoutOptions.length > 0) {
@@ -610,7 +778,18 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                 }
             });
 
-            availableFieldOptionsFromResults = uniq(allAvailableFieldsFromResults).map(field => { return { key: field, text: field }; });
+            availableFieldOptionsFromResults = uniq(allAvailableFieldsFromResults).map(field => {
+                // Trim common prefixes to make field names cleaner for filtering
+                let cleanFieldName = field;
+                if (field.startsWith('resource.fields.')) {
+                    cleanFieldName = field.replace('resource.fields.', '');
+                } else if (field.startsWith('resource.listItem.fields.')) {
+                    cleanFieldName = field.replace('resource.listItem.fields.', '');
+                } else if (field.startsWith('resource.')) {
+                    cleanFieldName = field.replace('resource.', '');
+                }
+                return { key: cleanFieldName, text: cleanFieldName };
+            });
         }
 
         if (availableFieldOptionsFromResults.length > 0) {
@@ -621,7 +800,7 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                 required: true,
                 onCustomRender: (field, value, onUpdate, item) => {
                     return (
-                        React.createElement("div", null,
+                        React.createElement("div", { title: item[field.id] ? item[field.id] : '' },
                             React.createElement(AsyncCombo, {
                                 allowFreeform: true,
                                 availableOptions: availableFieldOptionsFromResults, // We remove already selected fields
@@ -651,6 +830,7 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                 panelDescription: webPartStrings.PropertyPane.DataFilterCollection.CustomizeFiltersDescription,
                 label: webPartStrings.PropertyPane.DataFilterCollection.CustomizeFiltersFieldLabel,
                 value: this.properties.filtersConfiguration,
+                tableClassName: commonStyles.slotTable,
                 fields: [
                     {
                         id: 'displayValue',
@@ -661,9 +841,25 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                     {
                         id: 'maxBuckets',
                         title: webPartStrings.PropertyPane.DataFilterCollection.FilterMaxBuckets,
-                        type: this._customCollectionFieldType.number,
+                        type: this._customCollectionFieldType.custom,
                         required: false,
-                        defaultValue: ""
+                        onCustomRender: (field, value, onUpdate, item, itemId, onCustomFieldValidation) => {
+                            const numValue = value ? parseInt(value.toString(), 10) : undefined;
+                            const errorMessage = numValue && numValue > 1000
+                                ? webPartStrings.PropertyPane.DataFilterCollection.FilterMaxBucketsWarning
+                                : '';
+
+                            return React.createElement(TextField, {
+                                key: `${field.id}-${itemId}`,
+                                type: 'number',
+                                value: value ? value.toString() : '',
+                                errorMessage: errorMessage,
+                                onChange: (ev, newValue) => {
+                                    const parsedValue = newValue && newValue.trim() !== '' ? parseInt(newValue, 10) : undefined;
+                                    onUpdate(field.id, parsedValue);
+                                }
+                            });
+                        }
                     },
                     {
                         id: 'selectedTemplate',
@@ -690,10 +886,14 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                             {
                                 key: BuiltinFilterTemplates.ComboBox,
                                 text: webPartStrings.PropertyPane.DataFilterCollection.Templates.ComboBoxTemplate
+                            },
+                            {
+                                key: BuiltinFilterTemplates.Hierarchical,
+                                text: webPartStrings.PropertyPane.DataFilterCollection.Templates.HierarchicalFilterTemplate
                             }
                         ]
                     },
-                    
+
                     {
                         id: 'expandByDefault',
                         title: webPartStrings.PropertyPane.DataFilterCollection.FilterExpandByDefault,
@@ -779,6 +979,7 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                         type: this._customCollectionFieldType.custom,
                         defaultValue: FilterSortType.ByName,
                         onCustomRender: (field, value, onUpdate, item) => {
+                            const currentItem = item as IHierarchicalFilterConfiguration;
                             return (
                                 React.createElement("div", null,
                                     React.createElement(Dropdown, {
@@ -792,7 +993,7 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                                                 text: webPartStrings.PropertyPane.DataFilterCollection.SortByCount
                                             },
                                         ],
-                                        disabled: item.selectedTemplate === BuiltinFilterTemplates.DateRange || item.selectedTemplate === BuiltinFilterTemplates.DateInterval,
+                                        disabled: currentItem.selectedTemplate === BuiltinFilterTemplates.DateRange || currentItem.selectedTemplate === BuiltinFilterTemplates.DateInterval || currentItem.selectedTemplate === BuiltinFilterTemplates.Hierarchical,
                                         defaultSelectedKey: item.sortBy,
                                         onChange: (ev, option) => onUpdate(field.id, option.key),
                                     } as IDropdownProps)
@@ -806,6 +1007,7 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                         type: this._customCollectionFieldType.custom,
                         defaultValue: FilterSortDirection.Ascending,
                         onCustomRender: (field, value, onUpdate, item) => {
+                            const currentItem = item as IHierarchicalFilterConfiguration;
                             return (
                                 React.createElement("div", null,
                                     React.createElement(Dropdown, {
@@ -819,10 +1021,386 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                                                 text: webPartStrings.PropertyPane.DataFilterCollection.SortDescending
                                             },
                                         ],
-                                        disabled: item.selectedTemplate === BuiltinFilterTemplates.DateRange || item.selectedTemplate === BuiltinFilterTemplates.DateInterval,
+                                        disabled: currentItem.selectedTemplate === BuiltinFilterTemplates.DateRange || currentItem.selectedTemplate === BuiltinFilterTemplates.DateInterval || currentItem.selectedTemplate === BuiltinFilterTemplates.Hierarchical,
                                         defaultSelectedKey: item.sortDirection,
                                         onChange: (ev, option) => onUpdate(field.id, option.key),
                                     } as IDropdownProps)
+                                )
+                            );
+                        }
+                    },
+                    {
+                        id: 'hierarchicalSettings',
+                        title: 'Hierarchical Settings',
+                        type: this._customCollectionFieldType.custom,
+                        onCustomRender: (field, value, onUpdate, item: IHierarchicalFilterConfiguration, itemId) => {
+                            if (item.selectedTemplate !== BuiltinFilterTemplates.Hierarchical) {
+                                return null;
+                            }
+
+                            const uiState = this.getHierarchicalSettingsUiState(itemId);
+                            const showModal = uiState.showModal;
+
+                            const currentTermSetId = item.termSetId || '';
+
+                            const extractGuid = (guidStr: string): string => {
+                                if (!guidStr) {
+                                    return '';
+                                }
+
+                                const match = /Guid\(([0-9a-fA-F-]{36})\)/.exec(guidStr);
+                                return match ? match[1] : guidStr;
+                            };
+
+                            let currentTermSetName = 'Not selected';
+                            if (currentTermSetId) {
+                                Array.from(this.groupedTermSets.values()).forEach(termSets => {
+                                    const found = termSets.find(ts => extractGuid(ts.id) === currentTermSetId);
+                                    if (found) {
+                                        currentTermSetName = found.name;
+                                    }
+                                });
+                            }
+
+                            const expandedGroups = new Set<string>(uiState.expandedGroups);
+
+                            if (currentTermSetId && expandedGroups.size === 0) {
+                                Array.from(this.groupedTermSets.keys()).forEach(groupId => {
+                                    const termSets = this.groupedTermSets.get(groupId);
+                                    if (termSets) {
+                                        const hasSelectedTermSet = termSets.some(ts => extractGuid(ts.id) === currentTermSetId);
+                                        if (hasSelectedTermSet) {
+                                            expandedGroups.add(groupId);
+                                            uiState.expandedGroups = new Set(expandedGroups);
+                                        }
+                                    }
+                                });
+                            }
+
+                            const toggleGroupExpanded = (groupId: string) => {
+                                if (expandedGroups.has(groupId)) {
+                                    expandedGroups.delete(groupId);
+                                } else {
+                                    expandedGroups.add(groupId);
+                                }
+
+                                uiState.expandedGroups = new Set(expandedGroups);
+                                this.context.propertyPane.refresh();
+                            };
+
+                            const effectiveCacheDuration = item.cacheDuration ?? 3;
+
+                            if (!showModal) {
+                                return React.createElement("div", {
+                                    key: `${field.id}-${itemId}`,
+                                    style: { marginTop: '10px' }
+                                },
+                                    React.createElement("div", {
+                                        style: {
+                                            padding: '10px 12px',
+                                            backgroundColor: '#f0f0f0',
+                                            border: '1px solid #d0d0d0',
+                                            borderRadius: '2px',
+                                            marginBottom: '10px'
+                                        }
+                                    },
+                                        React.createElement("div", { style: { marginBottom: '8px' } },
+                                            React.createElement("strong", null, 'Term Set: '),
+                                            React.createElement("span", { style: { color: '#444' } }, currentTermSetName)
+                                        ),
+                                        React.createElement("div", null,
+                                            React.createElement("strong", null, 'Cache Duration: '),
+                                            React.createElement("span", { style: { color: '#444' } }, `${effectiveCacheDuration} days`)
+                                        )
+                                    ),
+                                    React.createElement("button", {
+                                        className: 'ms-Button ms-Button--primary',
+                                        onClick: () => {
+                                            uiState.showModal = true;
+                                            uiState.cacheMessage = '';
+                                            this.context.propertyPane.refresh();
+                                        },
+                                        style: {
+                                            padding: '8px 16px',
+                                            backgroundColor: 'var(--themePrimary, #106ebe)',
+                                            color: 'var(--white, #ffffff)',
+                                            border: 'none',
+                                            borderRadius: '2px',
+                                            cursor: 'pointer',
+                                            fontSize: '14px',
+                                            fontWeight: '600'
+                                        }
+                                    }, 'Edit Hierarchical Settings')
+                                );
+                            }
+
+                            return React.createElement("div", {
+                                key: `${field.id}-modal-${itemId}`,
+                                style: {
+                                    position: 'fixed',
+                                    top: 0,
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    zIndex: 10000
+                                },
+                                onClick: (e) => {
+                                    if (e.target === e.currentTarget) {
+                                        uiState.showModal = false;
+                                        this.context.propertyPane.refresh();
+                                    }
+                                }
+                            },
+                                React.createElement("div", {
+                                    style: {
+                                        backgroundColor: 'white',
+                                        borderRadius: '4px',
+                                        padding: '20px',
+                                        width: '90%',
+                                        maxWidth: '500px',
+                                        maxHeight: '80vh',
+                                        overflowY: 'auto',
+                                        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.2)'
+                                    }
+                                },
+                                    React.createElement("div", {
+                                        style: {
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            marginBottom: '20px',
+                                            borderBottom: '1px solid #e0e0e0',
+                                            paddingBottom: '10px'
+                                        }
+                                    },
+                                        React.createElement("h3", { style: { margin: 0, fontSize: '16px', fontWeight: '600' } }, 'Hierarchical Filter Settings'),
+                                        React.createElement("button", {
+                                            onClick: () => {
+                                                uiState.showModal = false;
+                                                this.context.propertyPane.refresh();
+                                            },
+                                            style: {
+                                                background: 'none',
+                                                border: 'none',
+                                                fontSize: '24px',
+                                                cursor: 'pointer',
+                                                padding: 0,
+                                                color: '#666'
+                                            }
+                                        }, '✕')
+                                    ),
+
+                                    React.createElement("div", { style: { marginBottom: '20px' } },
+                                        React.createElement("label", {
+                                            style: {
+                                                display: 'block',
+                                                marginBottom: '8px',
+                                                fontWeight: '600',
+                                                fontSize: '13px'
+                                            }
+                                        }, 'Select Term Set:'),
+                                        React.createElement("input", {
+                                            type: 'text',
+                                            placeholder: 'Search term sets...',
+                                            value: uiState.searchText,
+                                            onChange: (e) => {
+                                                uiState.searchText = e.target.value.toLowerCase();
+                                                this.context.propertyPane.refresh();
+                                            },
+                                            style: {
+                                                width: '100%',
+                                                padding: '8px',
+                                                marginBottom: '10px',
+                                                border: '1px solid #d0d0d0',
+                                                borderRadius: '2px',
+                                                fontSize: '13px',
+                                                boxSizing: 'border-box'
+                                            }
+                                        }),
+                                        React.createElement("div", {
+                                            style: {
+                                                border: '1px solid #ccc',
+                                                borderRadius: '2px',
+                                                maxHeight: '200px',
+                                                overflowY: 'auto',
+                                                padding: '8px'
+                                            }
+                                        },
+                                            (() => {
+                                                const searchText = uiState.searchText;
+
+                                                const matchesSearch = (termSetName: string): boolean => {
+                                                    if (!searchText) {
+                                                        return true;
+                                                    }
+
+                                                    return termSetName.toLowerCase().includes(searchText);
+                                                };
+
+                                                const groupHasMatches = (termSets: Array<{ id: string, name: string, groupId: string, groupName: string }>): boolean => {
+                                                    if (!searchText) {
+                                                        return true;
+                                                    }
+
+                                                    return termSets.some(ts => matchesSearch(ts.name));
+                                                };
+
+                                                if (Array.from(this.groupedTermSets.entries()).length === 0) {
+                                                    return React.createElement("div", { style: { color: '#999', fontStyle: 'italic' } },
+                                                        'No term sets available. Loading term store...');
+                                                }
+
+                                                return Array.from(this.groupedTermSets.entries()).map(([groupId, termSets]) => {
+                                                    if (!groupHasMatches(termSets)) {
+                                                        return null;
+                                                    }
+
+                                                    const groupName = termSets.length > 0 ? termSets[0].groupName : groupId;
+                                                    const isExpanded = expandedGroups.has(groupId);
+
+                                                    return React.createElement("div", { key: groupId },
+                                                        React.createElement("div", {
+                                                            style: {
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                padding: '4px 0',
+                                                                cursor: 'pointer',
+                                                                userSelect: 'none'
+                                                            },
+                                                            onClick: () => toggleGroupExpanded(groupId)
+                                                        },
+                                                            React.createElement("span", {
+                                                                style: { marginRight: '6px', minWidth: '16px', fontSize: '12px', fontWeight: 'bold' }
+                                                            }, isExpanded ? '▼' : '▶'),
+                                                            React.createElement("span", { style: { fontWeight: 'bold', color: '#333' } }, groupName)
+                                                        ),
+                                                        isExpanded && React.createElement("div", {
+                                                            style: { marginLeft: '16px', paddingBottom: '8px' }
+                                                        },
+                                                            termSets.filter(ts => matchesSearch(ts.name)).map(ts => {
+                                                                const cleanTermSetId = extractGuid(ts.id);
+                                                                const isSelected = cleanTermSetId === currentTermSetId;
+
+                                                                return React.createElement("div", {
+                                                                    key: ts.id,
+                                                                    onClick: () => {
+                                                                        const cleanGroupId = extractGuid(ts.groupId);
+                                                                        onUpdate('termSetId', cleanTermSetId);
+                                                                        onUpdate('termGroupId', cleanGroupId);
+                                                                    },
+                                                                    style: {
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        padding: '6px 8px',
+                                                                        marginBottom: '4px',
+                                                                        backgroundColor: isSelected ? '#e3f2fd' : '#f5f5f5',
+                                                                        border: isSelected ? '2px solid #2196F3' : '1px solid #ddd',
+                                                                        borderRadius: '2px',
+                                                                        cursor: 'pointer'
+                                                                    }
+                                                                },
+                                                                    React.createElement("input", {
+                                                                        type: 'checkbox',
+                                                                        checked: isSelected,
+                                                                        readOnly: true,
+                                                                        style: { marginRight: '8px', cursor: 'pointer' }
+                                                                    }),
+                                                                    ts.name
+                                                                );
+                                                            })
+                                                        )
+                                                    );
+                                                }).filter(x => x !== null);
+                                            })()
+                                        )
+                                    ),
+
+                                    React.createElement("div", { style: { marginBottom: '20px' } },
+                                        React.createElement("label", {
+                                            style: {
+                                                display: 'block',
+                                                marginBottom: '8px',
+                                                fontWeight: '600',
+                                                fontSize: '13px'
+                                            }
+                                        }, `Cache Duration: ${effectiveCacheDuration} days`),
+                                        React.createElement("input", {
+                                            type: 'range',
+                                            min: 1,
+                                            max: 5,
+                                            value: effectiveCacheDuration,
+                                            onChange: (e) => {
+                                                const newValue = Number.parseInt(e.target.value, 10);
+                                                onUpdate('cacheDuration', newValue);
+                                            },
+                                            style: { width: '100%', height: '4px', borderRadius: '2px', outline: 'none', cursor: 'pointer' }
+                                        }),
+                                        React.createElement("div", {
+                                            style: { display: 'flex', justifyContent: 'space-between', marginTop: '4px', fontSize: '12px', color: '#666' }
+                                        },
+                                            React.createElement("span", null, '1'),
+                                            React.createElement("span", null, '5')
+                                        )
+                                    ),
+
+                                    React.createElement("div", { style: { marginBottom: '20px' } },
+                                        React.createElement("button", {
+                                            onClick: () => {
+                                                if (this.taxonomyService && item.termSetId) {
+                                                    this.taxonomyService.clearTermsCache(item.termSetId);
+                                                    uiState.cacheMessage = 'Terms cache cleared';
+                                                    this.context.propertyPane.refresh();
+                                                }
+                                            },
+                                            style: {
+                                                width: '100%',
+                                                padding: '10px',
+                                                backgroundColor: '#50e6ff',
+                                                color: '#333',
+                                                border: 'none',
+                                                borderRadius: '2px',
+                                                cursor: 'pointer',
+                                                fontSize: '13px',
+                                                fontWeight: '600'
+                                            }
+                                        }, 'Refresh Cache Now')
+                                    ),
+                                    uiState.cacheMessage
+                                        ? React.createElement(MessageBar, {
+                                            messageBarType: MessageBarType.success,
+                                            isMultiline: false,
+                                            onDismiss: () => {
+                                                uiState.cacheMessage = '';
+                                                this.context.propertyPane.refresh();
+                                            }
+                                        }, uiState.cacheMessage)
+                                        : null,
+
+                                    React.createElement("div", {
+                                        style: { display: 'flex', gap: '8px', justifyContent: 'flex-end' }
+                                    },
+                                        React.createElement("button", {
+                                            className: 'ms-Button ms-Button--primary',
+                                            onClick: () => {
+                                                uiState.showModal = false;
+                                                this.context.propertyPane.refresh();
+                                            },
+                                            style: {
+                                                padding: '8px 16px',
+                                                backgroundColor: 'var(--themePrimary, #106ebe)',
+                                                color: 'var(--white, #ffffff)',
+                                                border: 'none',
+                                                borderRadius: '2px',
+                                                cursor: 'pointer',
+                                                fontSize: '13px',
+                                                fontWeight: '600'
+                                            }
+                                        }, 'Done')
+                                    )
                                 )
                             );
                         }
@@ -919,7 +1497,7 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                 return '';
             }
             // Resolves an error if the file isn't a valid .htm or .html file
-            else if (!this.templateService.isValidTemplateFile(value, [".html",".htm",".txt"])) {
+            else if (!this.templateService.isValidTemplateFile(value, [".html", ".htm", ".txt"])) {
                 return webPartStrings.PropertyPane.LayoutPage.ErrorTemplateExtension;
             }
             // Resolves an error if the file doesn't answer a simple head request
@@ -960,6 +1538,7 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
     private async initializeWebPartServices(): Promise<void> {
         this.webPartInstanceServiceScope = this.context.serviceScope.startNewChild();
         this.templateService = this.webPartInstanceServiceScope.createAndProvide(TemplateService.ServiceKey, TemplateService);
+        this.taxonomyService = this.webPartInstanceServiceScope.createAndProvide(TaxonomyService.ServiceKey, TaxonomyService);
         this.dynamicDataService = this.webPartInstanceServiceScope.createAndProvide(DynamicDataService.ServiceKey, DynamicDataService);
         this.dynamicDataService.dynamicDataProvider = this.context.dynamicDataProvider;
         this.webPartInstanceServiceScope.finish();
@@ -1071,6 +1650,23 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
         }
     }
 
+
+
+    private _resetContentStylingToDefault(): void {
+        // Reset all content styling properties to their default values
+        this.properties.filterBackgroundColor = undefined;
+        this.properties.filterBorderColor = undefined;
+        this.properties.filterBorderThickness = undefined;
+
+        // Refresh the property pane to show the reset values
+        this.context.propertyPane.refresh();
+
+        // Re-render the web part to apply changes
+        this.render();
+    }
+
+
+
     /**
      * Initializes filter results according to 'Static' type filters in the configuration
      * @param filtersConfiguration The current filters configurations
@@ -1082,7 +1678,7 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
         // Get the corresponding configuration for this filter
         filtersConfiguration.forEach(filterConfiguration => {
 
-            if (filterConfiguration.type === FilterType.StaticFilter) {
+            if (BuiltinFilterTypes[filterConfiguration.selectedTemplate] === FilterType.StaticFilter) {
 
                 // Check if the filter already exists
                 if (filterResults.filter(filterResult => filterResult.filterName === filterConfiguration.filterName).length === 0) {
@@ -1182,10 +1778,10 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                 }
             }
 
-            if( sortByField === 'name') {
+            if (sortByField === 'name') {
                 filter.values = sortDirection === FilterSortDirection.Ascending ? sortBy(filter.values, [item => item["name"].toLocaleLowerCase()]) : sortBy(filter.values, [item => item["name"].toLocaleLowerCase()]).reverse();
             }
-            else{
+            else {
                 filter.values = sortDirection === FilterSortDirection.Ascending ? sortBy(filter.values, sortByField) : sortBy(filter.values, sortByField).reverse();
             }
 

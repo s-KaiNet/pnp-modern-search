@@ -18,6 +18,21 @@ define([], function() {
                 QueryStringParameterName: "Parameternnavn",
                 QueryParameterNotEmpty: "Indsæt venligst en parameterværdi."
             },
+            SearchBoxStylingGroup: {
+                GroupName: "Søgeboks styling",
+                BorderColorLabel: "Kantfarve",
+                BorderRadiusLabel: "Kantradius (px)",
+                HeightLabel: "Højde (px)",
+                ButtonColorLabel: "Søgeknappens farve",
+                ButtonHoverColorLabel: "Søgeknappens hover-farve",
+                PlaceholderTextColorLabel: "Pladsholdertekstens farve",
+                BackgroundColorLabel: "Baggrundsfarve",
+                TextColorLabel: "Tekstfarve",
+                ResetToDefaultLabel: "Gendan til standardstil",
+                ResetToDefaultDescription: "Gendan alle stilmuligheder til deres standardværdier",
+                ResetTitleStylingLabel: "Gendan titelstil til standard",
+                ResetTitleStylingDescription: "Gendan alle titelstilingmuligheder til deres standardværdier"
+            },
             AvailableConnectionsGroup: {
                 GroupName: "Tilgængelige forbindelser",
                 UseDynamicDataSourceLabel: "Anvend dynamisk datakilde som standard-input",

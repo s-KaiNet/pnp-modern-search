@@ -15,10 +15,13 @@ import {
     PropertyPaneDynamicFieldSet,
     PropertyPaneTextField,
     PropertyPaneToggle,
+    PropertyPaneButton,
+    PropertyPaneButtonType,
     DynamicDataSharedDepth,
     IPropertyPanePage,
     IPropertyPaneGroup
 } from "@microsoft/sp-property-pane";
+import { PropertyFieldColorPicker, PropertyFieldColorPickerStyle } from '@pnp/spfx-property-controls/lib/PropertyFieldColorPicker';
 import SearchBoxContainer from './components/SearchBoxContainer';
 import { ISearchBoxContainerProps } from './components/ISearchBoxContainerProps';
 import { DynamicDataService } from '../../services/dynamicDataService/DynamicDataService';
@@ -129,6 +132,16 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
 
     public async render(): Promise<void> {
 
+        // Check audience targeting - if user is not in audience, don't render
+        const isInAudience = await this.isInAudience();
+        this._isHiddenByAudience = !isInAudience;
+        if (!isInAudience) {
+            // eslint-disable-next-line @rushstack/pair-react-dom-render-unmount -- cleanup on audience hide, paired with onDispose
+            ReactDom.unmountComponentAtNode(this.domElement);
+            this.domElement.innerHTML = '';
+            return this.renderCompleted();
+        }
+
         try {
 
             // Reset the error message every time
@@ -151,6 +164,12 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
 
     protected renderCompleted(): void {
 
+        // If hidden by audience targeting, skip rendering and just mark as completed
+        if (this._isHiddenByAudience) {
+            super.renderCompleted();
+            return;
+        }
+
         if (!this.domElement) {
             return;
         }
@@ -164,7 +183,7 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
                     inputValue = decodeURIComponent(inputValue);
                 }
 
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
             } catch (error) {
                 // Likely issue when q=%25 in spfx
             }
@@ -172,13 +191,17 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
 
         if (inputValue && typeof (inputValue) === 'string') {
 
-            // Notify subscriber a new value if available
-            this._searchQueryText = decodeURIComponent(inputValue);
+            const decodedInputValue = decodeURIComponent(inputValue);
 
-            // Set the input query text globally for the page. There can be only one input query text submitted at a time even if multiple search box components are on the page
-            GlobalSettings.setValue(BuiltinTokenNames.inputQueryText, this._searchQueryText);
+            // Only notify subscribers if the value actually changed
+            if (decodedInputValue !== this._searchQueryText) {
+                this._searchQueryText = decodedInputValue;
 
-            this.context.dynamicDataSourceManager.notifyPropertyChanged(ComponentType.SearchBox);
+                // Set the input query text globally for the page. There can be only one input query text submitted at a time even if multiple search box components are on the page
+                GlobalSettings.setValue(BuiltinTokenNames.inputQueryText, this._searchQueryText);
+
+                this.context.dynamicDataSourceManager.notifyPropertyChanged(ComponentType.SearchBox);
+            }
         }
 
         renderRootElement = React.createElement(SearchBoxContainer, {
@@ -198,6 +221,20 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
             suggestionProviders: this._selectedCustomProviders,
             numberOfSuggestionsPerGroup: this.properties.numberOfSuggestionsPerGroup,
             tokenService: this.tokenService,
+            searchBoxBorderColor: this.properties.searchBoxBorderColor,
+            searchBoxHeight: this.properties.searchBoxHeight,
+            searchBoxFontSize: this.properties.searchBoxFontSize,
+            searchButtonColor: this.properties.searchButtonColor,
+            placeholderTextColor: this.properties.placeholderTextColor,
+            searchBoxTextColor: this.properties.searchBoxTextColor,
+            showSearchButtonWhenEmpty: this.properties.showSearchButtonWhenEmpty,
+            searchButtonDisplayMode: this.properties.searchButtonDisplayMode,
+            searchIconName: this.properties.searchIconName,
+            searchButtonText: this.properties.searchButtonText,
+            titleFont: this.properties.titleFont,
+            titleFontSize: this.properties.titleFontSize,
+            titleFontColor: this.properties.titleFontColor,
+            instanceId: this.instanceId,
             webPartTitleProps: {
                 displayMode: this.displayMode,
                 title: this.properties.title,
@@ -217,6 +254,7 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
             }, commonStrings.General.Resources.PleaseReferToDocumentationMessage));
         }
 
+        // eslint-disable-next-line @rushstack/pair-react-dom-render-unmount -- render is paired with unmount in onDispose
         ReactDom.render(renderRootElement, this.domElement);
 
         // This call set this.renderedOnce to 'true' so we need to execute it at the very end
@@ -227,6 +265,7 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
         if (this._pushStateCallback) {
             window.history.pushState = this._pushStateCallback;
         }
+        // eslint-disable-next-line @rushstack/pair-react-dom-render-unmount -- paired with render in renderCompleted
         ReactDom.unmountComponentAtNode(this.domElement);
     }
 
@@ -257,7 +296,13 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
                     {
                         groupName: webPartStrings.PropertyPane.SearchBoxSettingsGroup.GroupName,
                         groupFields: this._getSearchBoxSettingsFields()
-                    }
+                    },
+                    {
+                        groupName: webPartStrings.PropertyPane.SearchBoxStylingGroup.GroupName,
+                        isCollapsed: true,
+                        groupFields: this._getSearchBoxStylingFields()
+                    },
+                    this.getTitleStylingPropertyPaneGroup()
                 ],
                 displayGroupsAsAccordion: true
             },
@@ -296,6 +341,7 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
                 groups: [
                     ...this.getPropertyPaneWebPartInfoGroups(),
                     ...extensibilityConfigurationGroups,
+                    this.getAudienceTargetingPropertyPaneGroup(),
                     {
                         groupName: commonStrings.PropertyPane.InformationPage.ImportExport,
                         groupFields: [this._propertyPanePropertyEditor({
@@ -441,6 +487,7 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
                     disabled: !this.properties.enableQuerySuggestions,
                     label: webPartStrings.PropertyPane.QuerySuggestionsGroup.SuggestionProvidersLabel,
                     value: this.properties.suggestionProviderConfiguration,
+                    tableClassName: commonStyles.slotTable,
                     fields: [
                         {
                             id: 'enabled',
@@ -570,6 +617,138 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
         return searchBehaviorOptionsFields;
     }
 
+    private _getSearchBoxStylingFields(): IPropertyPaneField<any>[] {
+        let searchBoxStylingFields: IPropertyPaneField<any>[] = [
+            // Input Field Settings
+            PropertyPaneSlider('searchBoxHeight', {
+                label: webPartStrings.PropertyPane.SearchBoxStylingGroup.HeightLabel,
+                min: 24,
+                max: 60,
+                step: 2,
+                showValue: true,
+                value: this.properties.searchBoxHeight || 32
+            }),
+            PropertyPaneSlider('searchBoxFontSize', {
+                label: webPartStrings.PropertyPane.SearchBoxStylingGroup.FontSizeLabel,
+                min: 10,
+                max: 24,
+                step: 1,
+                showValue: true,
+                value: this.properties.searchBoxFontSize || 14
+            }),
+
+            // Colors
+            PropertyFieldColorPicker('searchBoxBorderColor', {
+                label: webPartStrings.PropertyPane.SearchBoxStylingGroup.BorderColorLabel,
+                selectedColor: this.properties.searchBoxBorderColor,
+                onPropertyChange: this.onPropertyPaneFieldChanged,
+                properties: this.properties,
+                disabled: false,
+                debounce: 500,
+                isHidden: false,
+                alphaSliderHidden: false,
+                style: PropertyFieldColorPickerStyle.Inline,
+                key: 'searchBoxBorderColorFieldId'
+            }),
+            PropertyFieldColorPicker('searchBoxTextColor', {
+                label: webPartStrings.PropertyPane.SearchBoxStylingGroup.TextColorLabel,
+                selectedColor: this.properties.searchBoxTextColor,
+                onPropertyChange: this.onPropertyPaneFieldChanged,
+                properties: this.properties,
+                disabled: false,
+                debounce: 500,
+                isHidden: false,
+                alphaSliderHidden: false,
+                style: PropertyFieldColorPickerStyle.Inline,
+                key: 'searchBoxTextColorFieldId'
+            }),
+            PropertyFieldColorPicker('placeholderTextColor', {
+                label: webPartStrings.PropertyPane.SearchBoxStylingGroup.PlaceholderTextColorLabel,
+                selectedColor: this.properties.placeholderTextColor,
+                onPropertyChange: this.onPropertyPaneFieldChanged,
+                properties: this.properties,
+                disabled: false,
+                debounce: 500,
+                isHidden: false,
+                alphaSliderHidden: false,
+                style: PropertyFieldColorPickerStyle.Inline,
+                key: 'placeholderTextColorFieldId'
+            }),
+            PropertyFieldColorPicker('searchButtonColor', {
+                label: webPartStrings.PropertyPane.SearchBoxStylingGroup.ButtonColorLabel,
+                selectedColor: this.properties.searchButtonColor,
+                onPropertyChange: this.onPropertyPaneFieldChanged,
+                properties: this.properties,
+                disabled: false,
+                debounce: 500,
+                isHidden: false,
+                alphaSliderHidden: false,
+                style: PropertyFieldColorPickerStyle.Inline,
+                key: 'searchButtonColorFieldId'
+            }),
+
+            // Search Button Configuration
+            PropertyPaneToggle('showSearchButtonWhenEmpty', {
+                label: webPartStrings.PropertyPane.SearchBoxStylingGroup.ShowSearchButtonWhenEmptyLabel,
+                checked: this.properties.showSearchButtonWhenEmpty || false
+            }),
+            PropertyPaneDropdown('searchButtonDisplayMode', {
+                label: webPartStrings.PropertyPane.SearchBoxStylingGroup.SearchButtonDisplayModeLabel,
+                options: [
+                    { key: 'icon', text: 'Icon only' },
+                    { key: 'text', text: 'Text only' },
+                    { key: 'both', text: 'Icon and text' }
+                ],
+                selectedKey: this.properties.searchButtonDisplayMode || 'icon'
+            }),
+            PropertyPaneTextField('searchIconName', {
+                label: webPartStrings.PropertyPane.SearchBoxStylingGroup.SearchIconNameLabel,
+                value: this.properties.searchIconName || '',
+                placeholder: 'Forward',
+                description: webPartStrings.PropertyPane.SearchBoxStylingGroup.SearchIconNameDescription,
+                disabled: this.properties.searchButtonDisplayMode === 'text'
+            }),
+            PropertyPaneTextField('searchButtonText', {
+                label: webPartStrings.PropertyPane.SearchBoxStylingGroup.SearchButtonTextLabel,
+                value: this.properties.searchButtonText || '',
+                placeholder: 'Search',
+                disabled: this.properties.searchButtonDisplayMode === 'icon'
+            }),
+
+            // Reset
+            PropertyPaneButton('resetSearchBoxStyling', {
+                text: webPartStrings.PropertyPane.SearchBoxStylingGroup.ResetToDefaultLabel,
+                description: webPartStrings.PropertyPane.SearchBoxStylingGroup.ResetToDefaultDescription,
+                buttonType: PropertyPaneButtonType.Command,
+                onClick: this._resetSearchBoxStylingToDefault.bind(this)
+            })
+        ];
+
+        return searchBoxStylingFields;
+    }
+
+    private _resetSearchBoxStylingToDefault(): void {
+        // Reset all styling properties to their default values
+        this.properties.searchBoxBorderColor = undefined;
+        this.properties.searchBoxHeight = undefined;
+        this.properties.searchBoxFontSize = undefined;
+        this.properties.searchButtonColor = undefined;
+        this.properties.placeholderTextColor = undefined;
+        this.properties.searchBoxTextColor = undefined;
+
+        // Reset button properties to their default values
+        this.properties.showSearchButtonWhenEmpty = undefined;
+        this.properties.searchButtonDisplayMode = undefined;
+        this.properties.searchIconName = undefined;
+        this.properties.searchButtonText = undefined;
+
+        // Refresh the property pane to show the reset values
+        this.context.propertyPane.refresh();
+
+        // Re-render the web part to apply changes
+        this.render();
+    }
+
     private getExtensibilityFields(): IPropertyPaneField<any>[] {
 
         let extensibilityFields: IPropertyPaneField<any>[] = [
@@ -581,6 +760,7 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
                 panelDescription: webPartStrings.PropertyPane.InformationPage.Extensibility.PanelDescription,
                 label: commonStrings.PropertyPane.InformationPage.Extensibility.FieldLabel,
                 value: this.properties.extensibilityLibraryConfiguration,
+                tableClassName: commonStyles.slotTable,
                 fields: [
                     {
                         id: 'name',
@@ -643,6 +823,7 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
 
         this.properties.openBehavior = this.properties.openBehavior ? this.properties.openBehavior : PageOpenBehavior.Self;
         this.properties.queryPathBehavior = this.properties.queryPathBehavior ? this.properties.queryPathBehavior : QueryPathBehavior.URLFragment;
+        this.properties.reQueryOnClear = this.properties.reQueryOnClear !== undefined ? this.properties.reQueryOnClear : true;
 
         this.properties.suggestionProviderConfiguration = this.properties.suggestionProviderConfiguration ? this.properties.suggestionProviderConfiguration : [];
         this.properties.numberOfSuggestionsPerGroup = this.properties.numberOfSuggestionsPerGroup ? this.properties.numberOfSuggestionsPerGroup : 10;
@@ -654,6 +835,8 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
             enabled: true,
             id: Constants.DEFAULT_EXTENSIBILITY_LIBRARY_COMPONENT_ID
         }];
+
+        // Styling properties are initialized as undefined and will use theme defaults unless explicitly set by user
     }
 
     private initializeWebPartServices(): void {
@@ -892,7 +1075,11 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
         const source = DynamicPropertyHelper.tryGetSourceSafe(this.properties.queryText);
 
         if (source && source.id === ComponentType.PageEnvironment) {
-            this.render();
+            // Only re-render if the dynamic property value actually changed
+            const currentValue = DynamicPropertyHelper.tryGetValueSafe(this.properties.queryText);
+            if (currentValue !== this._searchQueryText) {
+                this.render();
+            }
         }
     }
 }

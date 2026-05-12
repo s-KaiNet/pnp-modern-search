@@ -127,9 +127,9 @@ declare interface ICommonStrings {
         ApplyQueryTemplateBtnText: string;
         EnableAudienceTargetingTglLabel: string;
         CollapseSpecificationLabel: string;
+        CacheTimeoutLabel: string;
         True: string;
         False: string;
-                
       },
       MicrosoftSearch: {
         QueryTextFieldLabel: string;
@@ -195,6 +195,7 @@ declare interface ICommonStrings {
       SortByPlaceholderText: string;
       SortByDefaultOptionText: string;
       DownloadButtonText: string;
+      DownloadCSVButtonText: string;
     },
     Layouts: {
       Debug: {
@@ -242,6 +243,7 @@ declare interface ICommonStrings {
         EnableStickyHeader: string;
         StickyHeaderListViewHeight: string;
         EnableDownload: string;
+        UseAlternatingBackgroundColor:string;
       };
       Cards: {
         Name: string;
@@ -304,6 +306,8 @@ declare interface ICommonStrings {
         ShowPersonaCardOnHoverCalloutMsgNative: string;
         ShowPersonaPresenceInfo: string;
         ShowPersonaPresenceInfoCalloutMsg: string;
+        ShowHoverOnPictureOnly: string;
+        ShowHoverOnPictureOnlyCalloutMsg: string;
         Fields: {
           ImageUrl: string;
           PrimaryText: string;
@@ -406,7 +410,19 @@ declare interface ICommonStrings {
           }
         },
         ImportExport: string;
-      }
+      },
+      AudienceTargeting: {
+        GroupName: string;
+        TargetAudienceLabel: string;
+        CacheDurationLabel: string;
+        CacheDurationDescription: string;
+      },
+      TitleFontDefault: string;
+      TitleStylingGroupName: string;
+      TitleFont: string;
+      TitleFontSize: string;
+      TitleFontColor: string;
+      ResetTitleStylingToDefault: string;
     },
     Filters: {
       ApplyAllFiltersButtonLabel: string;
@@ -418,6 +434,8 @@ declare interface ICommonStrings {
       UseAndOperatorValues: string;
       UseOrOperatorValues: string;
       UseValuesOperators: string;
+      LoadingMessage: string;
+      SearchPlaceholder: string;
     },
     SuggestionProviders: {
       SharePointStatic: {

@@ -94,9 +94,9 @@ export class TokenService implements ITokenService {
     private dateHelper: DateHelper;
 
     /**
-     * The moment.js library reference
+     * The dayjs library reference
      */
-    private moment: any;
+    private dayjs: any;
 
     public static ServiceKey: ServiceKey<ITokenService> = ServiceKey.create(TokenService_ServiceKey, TokenService);
 
@@ -130,7 +130,7 @@ export class TokenService implements ITokenService {
 
         if (inputString) {
 
-            this.moment = await this.dateHelper.moment();
+            this.dayjs = await this.dateHelper.moment();
 
             // Resolves dynamic tokens (i.e. tokens resolved asynchronously versus static ones set by the Web Part context)
             inputString = await this.replacePageTokens(inputString);
@@ -321,6 +321,7 @@ export class TokenService implements ITokenService {
                 }
 
                 inputString = inputString.replace(matches[0], itemProp);
+                pageTokenRegExp.lastIndex = 0;
                 matches = pageTokenRegExp.exec(inputString);
             }
         }
@@ -430,6 +431,18 @@ export class TokenService implements ITokenService {
         const currentMinuteUTC = /\{CurrentMinuteUTC\}/gi;
         const currentSecondUTC = /\{CurrentSecondUTC\}/gi;
 
+        // Tokens with leading zero
+        const currentDate2Digits = /\{CurrentDate2Digits\}/gi;
+        const currentMonth2Digits = /\{CurrentMonth2Digits\}/gi;
+        const currentHour2Digits = /\{CurrentHour2Digits\}/gi;
+        const currentMinute2Digits = /\{CurrentMinute2Digits\}/gi;
+        const currentSecond2Digits = /\{CurrentSecond2Digits\}/gi;
+        const currentDate2DigitsUTC = /\{CurrentDate2DigitsUTC\}/gi;
+        const currentMonth2DigitsUTC = /\{CurrentMonth2DigitsUTC\}/gi;
+        const currentHour2DigitsUTC = /\{CurrentHour2DigitsUTC\}/gi;
+        const currentMinute2DigitsUTC = /\{CurrentMinute2DigitsUTC\}/gi;
+        const currentSecond2DigitsUTC = /\{CurrentSecond2DigitsUTC\}/gi;
+
         // Replaces any "{Today} +/- [digit]" expression
         let results = /\{Today\s*[\+-]\s*\[{0,1}\d{1,}\]{0,1}\}/gi;
         let match;
@@ -441,13 +454,13 @@ export class TokenService implements ITokenService {
                 const digit = parseInt(operatorSplit[operatorSplit.length - 1].replace("{", "").replace("}", "").trim()) * addOrRemove;
                 let dt = new Date();
                 dt.setDate(dt.getDate() + digit);
-                const formatDate = this.moment(dt).utc().format("YYYY-MM-DDTHH:mm:ss\\Z");
+                const formatDate = this.dayjs(dt).toISOString();
                 inputString = inputString.replace(result, formatDate);
             }
         }
 
         // Replaces any "{Today}" expression by it's actual value
-        let formattedDate = this.moment(new Date()).utc().format("YYYY-MM-DDTHH:mm:ss\\Z");
+        let formattedDate = this.dayjs(new Date()).toISOString();
         inputString = inputString.replace(new RegExp("{Today}", 'gi'), formattedDate);
 
         const d = new Date();
@@ -463,6 +476,19 @@ export class TokenService implements ITokenService {
         inputString = inputString.replace(currentHourUTC, d.getUTCHours().toString());
         inputString = inputString.replace(currentMinuteUTC, d.getUTCMinutes().toString());
         inputString = inputString.replace(currentSecondUTC, d.getUTCSeconds().toString());
+
+
+        //Replacing tokens with leading zero
+        inputString = inputString.replace(currentDate2Digits, ("0" + d.getDate().toString()).slice(-2));
+        inputString = inputString.replace(currentMonth2Digits, ("0" + (d.getMonth() + 1).toString()).slice(-2));
+        inputString = inputString.replace(currentHour2Digits, ("0" + d.getHours().toString()).slice(-2));
+        inputString = inputString.replace(currentMinute2Digits, ("0" + d.getMinutes().toString()).slice(-2));
+        inputString = inputString.replace(currentSecond2Digits, ("0" + d.getSeconds().toString()).slice(-2));
+        inputString = inputString.replace(currentDate2DigitsUTC, ("0" + d.getUTCDate().toString()).slice(-2));
+        inputString = inputString.replace(currentMonth2DigitsUTC, ("0" + (d.getUTCMonth() + 1).toString()).slice(-2));
+        inputString = inputString.replace(currentHour2DigitsUTC, ("0" + d.getUTCHours().toString()).slice(-2));
+        inputString = inputString.replace(currentMinute2DigitsUTC, ("0" + d.getUTCMinutes().toString()).slice(-2));
+        inputString = inputString.replace(currentSecond2DigitsUTC, ("0" + d.getUTCSeconds().toString()).slice(-2));
 
         return inputString;
     }
@@ -559,16 +585,16 @@ export class TokenService implements ITokenService {
 
         if (matches != null) {
 
-          if (!this.currentHubInfos) {
-              // Get hub site data
-              this.currentHubInfos = await this.getHubInfo();
-          }
+            if (!this.currentHubInfos) {
+                // Get hub site data
+                this.currentHubInfos = await this.getHubInfo();
+            }
 
-          while (matches !== null) {
-              const hubProp = matches[1];
-              inputString = inputString.replace(new RegExp(matches[0], "gi"), this.currentHubInfos[hubProp]);
-              matches = hubRegExp.exec(inputString);
-          }
+            while (matches !== null) {
+                const hubProp = matches[1];
+                inputString = inputString.replace(new RegExp(matches[0], "gi"), this.currentHubInfos[hubProp]);
+                matches = hubRegExp.exec(inputString);
+            }
         }
 
         return inputString;
