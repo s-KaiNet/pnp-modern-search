@@ -1,3 +1,4 @@
+"use client";
 import * as React from "react";
 import * as ReactDOM from 'react-dom';
 import { IDocumentCardPreviewProps, DocumentCard, DocumentCardPreview, DocumentCardTitle, DocumentCardActivity, DocumentCardType, DocumentCardDetails, IDocumentCardLocationStyleProps, IDocumentCardLocationStyles, IDocumentCardStyles, ITheme, Check } from '@fluentui/react';
@@ -15,7 +16,8 @@ import { TemplateService } from "../services/templateService/TemplateService";
 import { ITemplateService } from "../services/templateService/ITemplateService";
 import { UrlHelper } from "../helpers/UrlHelper";
 import { FileIcon } from "./FileIconComponent";
-import * as DOMPurify from 'dompurify';
+// import * as DOMPurify from 'dompurify';
+import * as DOMPurify from "isomorphic-dompurify";
 import { DomPurifyHelper } from "../helpers/DomPurifyHelper";
 import { IComponentFieldsConfiguration } from "../models/common/IComponentFieldsConfiguration";
 import { TestConstants } from "../common/Constants";
@@ -87,7 +89,7 @@ export class DocumentCardComponent extends React.Component<IDocumentCardComponen
             showCallout: false
         };
 
-        this._domPurify = DOMPurify.default;
+        this._domPurify = DOMPurify;
 
         this._domPurify.setConfig({
             WHOLE_DOCUMENT: true,

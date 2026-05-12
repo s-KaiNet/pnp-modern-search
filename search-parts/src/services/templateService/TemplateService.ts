@@ -1,3 +1,4 @@
+"use client";
 /* eslint-disable no-lone-blocks */
 import { FileFormat, ITemplateService } from "./ITemplateService";
 import { Log, ServiceKey, ServiceScope, Text } from "@microsoft/sp-core-library";
@@ -20,7 +21,8 @@ import { Constants, TestConstants } from "../../common/Constants";
 import * as handlebarsHelpers from 'handlebars-helpers';
 import { ServiceScopeHelper } from "../../helpers/ServiceScopeHelper";
 import { DomPurifyHelper } from "../../helpers/DomPurifyHelper";
-import * as DOMPurify from 'dompurify';
+// import * as DOMPurify from 'dompurify';
+import * as DOMPurify from "isomorphic-dompurify";
 import { IAdaptiveCardAction } from '@pnp/modern-search-extensibility';
 
 const TemplateService_ServiceKey = 'PnPModernSearchTemplateService';
@@ -974,7 +976,7 @@ export class TemplateService implements ITemplateService {
 
         if (!this._adaptiveCardsNS) {
 
-            const domPurify = DOMPurify.default;
+            const domPurify = DOMPurify;
 
             domPurify.setConfig({
                 WHOLE_DOCUMENT: false

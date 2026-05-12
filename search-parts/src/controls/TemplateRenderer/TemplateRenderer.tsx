@@ -1,9 +1,11 @@
+"use client";
 import * as React from 'react';
 import ITemplateRendererProps from './ITemplateRendererProps';
 import ITemplateRendererState from './ITemplateRendererState';
 import './TemplateRenderer.scss';
 import { isEqual } from "@microsoft/sp-lodash-subset";
-import * as DOMPurify from 'dompurify';
+// import * as DOMPurify from 'dompurify';
+import * as DOMPurify from "isomorphic-dompurify";
 import { DomPurifyHelper } from '../../helpers/DomPurifyHelper';
 import { ISearchResultsTemplateContext } from '../../models/common/ITemplateContext';
 import { LayoutRenderType } from '@pnp/modern-search-extensibility';
@@ -23,7 +25,7 @@ export class TemplateRenderer extends React.Component<ITemplateRendererProps, IT
         this.state = {
         };
 
-        this._domPurify = DOMPurify.default;
+        this._domPurify = DOMPurify;
 
         this._domPurify.setConfig({
             ADD_TAGS: ['style','#comment'],

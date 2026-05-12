@@ -1,3 +1,4 @@
+"use client";
 import * as React from 'react';
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const Flickity = require('react-flickity-component');
@@ -7,7 +8,9 @@ import * as Handlebars from 'handlebars';
 import { MessageBar, MessageBarType } from '@fluentui/react/lib/MessageBar';
 import { BaseWebComponent } from '@pnp/modern-search-extensibility';
 import { isEmpty } from "@microsoft/sp-lodash-subset";
-import * as DOMPurify from 'dompurify';
+// import * as DOMPurify from 'dompurify';
+
+import * as DOMPurify from "isomorphic-dompurify";
 import { ITemplateService } from '../services/templateService/ITemplateService';
 import { TemplateService } from '../services/templateService/TemplateService';
 import { DomPurifyHelper } from '../helpers/DomPurifyHelper';
@@ -85,7 +88,7 @@ export class SliderComponent extends React.Component<ISliderComponentProps, ISli
     public constructor(props: ISliderComponentProps) {
         super(props);
 
-        this._domPurify = DOMPurify.default;
+        this._domPurify = DOMPurify;
 
         this._domPurify.setConfig({
             WHOLE_DOCUMENT: true,

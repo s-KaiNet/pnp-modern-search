@@ -1,3 +1,4 @@
+"use client";
 import * as React from 'react';
 import { Persona, IPersonaProps, IPersonaSharedProps, getInitials, Icon, ITheme, PersonaPresence } from '@fluentui/react';
 import { TemplateService } from "../services/templateService/TemplateService";
@@ -5,7 +6,8 @@ import * as ReactDOM from 'react-dom';
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
 import { BaseWebComponent } from '@pnp/modern-search-extensibility';
 import { ITemplateService } from '../services/templateService/ITemplateService';
-import * as DOMPurify from 'dompurify';
+// import * as DOMPurify from 'dompurify';
+import * as DOMPurify from "isomorphic-dompurify";
 import { UrlHelper } from '../helpers/UrlHelper';
 import { isEmpty } from '@microsoft/sp-lodash-subset';
 import { DomPurifyHelper } from '../helpers/DomPurifyHelper';
@@ -119,7 +121,7 @@ export class PersonaComponent extends React.Component<IPersonaComponentProps, IP
     public constructor(props: IPersonaComponentProps) {
         super(props);
 
-        this._domPurify = DOMPurify.default;
+        this._domPurify = DOMPurify;
 
         this._domPurify.setConfig({
             WHOLE_DOCUMENT: true,

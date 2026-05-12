@@ -1,3 +1,4 @@
+"use client";
 import * as React from 'react';
 import { BaseWebComponent } from '@pnp/modern-search-extensibility';
 import * as ReactDOM from 'react-dom';
@@ -5,7 +6,9 @@ import { IGroup, IGroupDividerProps, Icon, Text, GroupedList, ITextProps, IStyle
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
 import styles from './CollapsibleContentComponent.module.scss';
 import 'core-js/features/dom-collections';
-import * as DOMPurify from 'dompurify';
+// import * as DOMPurify from 'dompurify';
+import * as DOMPurify from "isomorphic-dompurify";
+import { Constants } from '../common/Constants';
 
 export interface ICollapsibleContentComponentProps {
 
@@ -64,7 +67,11 @@ export class CollapsibleContentComponent extends React.Component<ICollapsibleCon
         this._onRenderHeader = this._onRenderHeader.bind(this);
         this._onTogglePanel = this._onTogglePanel.bind(this);
 
-        this._domPurify = DOMPurify.default;
+        this._domPurify = DOMPurify;
+        this._domPurify.setConfig({
+            WHOLE_DOCUMENT: true,
+            ALLOWED_URI_REGEXP: Constants.ALLOWED_URI_REGEXP,
+        });
     }
 
 
