@@ -1,6 +1,9 @@
 site_name: PnP Modern Search (v4)
 site_url: 'http://127.0.0.1:8000/'
 use_directory_urls: true
+exclude_docs: |
+  v3/
+  assets/v3_v4.png
 nav:
   - Getting Started:
     - Introduction: index.md
@@ -9,7 +12,6 @@ nav:
     - Create custom layouts: create-custom-layouts/index.md
     - How to contribute?: how-to-contribute.md 
     - Building documentation: build-the-doc.md
-    - Version 3 : v3/index.md
   - Search Results:
     - Usage: usage/search-results/index.md
     - Data sources: usage/search-results/data-sources/index.md
@@ -29,6 +31,7 @@ nav:
     - Introduction: extensibility/index.md
     - Templating: extensibility/templating.md
     - Custom layout: extensibility/custom_layout.md
+    - Custom filter control: extensibility/custom_filter_control.md
     - Custom web component: extensibility/custom_web_component.md
     - Custom suggestions provider: extensibility/custom_suggestions_provider.md
     - Custom Handlebars customizations: extensibility/handlebars_customizations.md
@@ -61,6 +64,8 @@ markdown_extensions:
   - pymdownx.inlinehilite
   - pymdownx.snippets
   - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
   - markdown_include.include:
           base_path: docs
 extra:

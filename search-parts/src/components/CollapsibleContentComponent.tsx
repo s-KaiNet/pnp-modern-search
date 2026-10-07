@@ -2,7 +2,7 @@
 import * as React from 'react';
 import { BaseWebComponent } from '@pnp/modern-search-extensibility';
 import * as ReactDOM from 'react-dom';
-import { IGroup, IGroupDividerProps, Icon, Text, GroupedList, ITextProps, IStyleFunctionOrObject, ITextStyles } from '@fluentui/react';
+import { IGroup, IGroupDividerProps, Icon, Text, GroupedList, ITextProps, IStyleFunctionOrObject, ITextStyles, TooltipHost, DirectionalHint } from '@fluentui/react';
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
 import styles from './CollapsibleContentComponent.module.scss';
 import { DomPurifyHelper } from '../helpers/DomPurifyHelper';
@@ -13,6 +13,12 @@ export interface ICollapsibleContentComponentProps {
      * The collapsible groupe name
      */
     groupName?: string;
+
+    /**
+     * Optional unique key used to persist collapsed state.
+     * Use this when multiple groups can share the same display name.
+     */
+    groupStorageKey?: string;
 
     /**
      * If the group should be collapsed by default
@@ -38,6 +44,16 @@ export interface ICollapsibleContentComponentProps {
      * The current theme settings
      */
     themeVariant?: IReadonlyTheme;
+
+    /**
+        * Indicates whether a warning should be shown in the header.
+     */
+    showWarningMarker?: boolean;
+
+    /**
+        * Warning text displayed in the header.
+     */
+    warningMarkerTooltip?: string;
 }
 
 export interface ICollapsibleContentComponentState {
@@ -51,24 +67,29 @@ export interface ICollapsibleContentComponentState {
 export class CollapsibleContentComponent extends React.Component<ICollapsibleContentComponentProps, ICollapsibleContentComponentState> {
 
     private componentRef = React.createRef<HTMLDivElement>();
+    private readonly headerRef = React.createRef<HTMLDivElement>();
+    private headerDividerProps: IGroupDividerProps;
     private storageKey: string;
+
+    /**
+     * Sanitized templates, keyed by the raw template they were produced from. Sanitizing is
+     * proportional to the template size, so it must not happen on every React render (ex:
+     * collapsing/expanding a group) for what can be a very large content template.
+     */
+    private readonly sanitizedTemplates: Map<string, string> = new Map<string, string>();
 
     public constructor(props) {
         super(props);
 
         // Create a unique storage key for this collapsible group
-        this.storageKey = `pnp-collapsible-${props.groupName}`;
+        this.storageKey = `pnp-collapsible-${props.groupStorageKey || props.groupName}`;
         
         // Check if there's a stored state for this group
         const storedState = sessionStorage.getItem(this.storageKey);
         const defaultCollapsed = this.getNormalizedDefaultCollapsed(props.defaultCollapsed);
         
-        // A forced-open state from the parent (selected filters or expandByDefault)
-        // must override any previously stored collapsed preference.
-        const initialCollapsedState = defaultCollapsed === false
-            ? false
-            : storedState
-                ? JSON.parse(storedState)
+        const initialCollapsedState = storedState
+            ? JSON.parse(storedState)
             : !!defaultCollapsed;
         
         this.state = {
@@ -78,22 +99,27 @@ export class CollapsibleContentComponent extends React.Component<ICollapsibleCon
         this._onRenderCell = this._onRenderCell.bind(this);
         this._onRenderHeader = this._onRenderHeader.bind(this);
         this._onTogglePanel = this._onTogglePanel.bind(this);
+        this._collapsePanel = this._collapsePanel.bind(this);
+        this._onContainerKeyDown = this._onContainerKeyDown.bind(this);
     }
 
-    public componentDidUpdate(prevProps: ICollapsibleContentComponentProps) {
-        const defaultCollapsed = this.getNormalizedDefaultCollapsed(this.props.defaultCollapsed);
-        const prevDefaultCollapsed = this.getNormalizedDefaultCollapsed(prevProps.defaultCollapsed);
-
-        // If the parent indicates this panel should be open (selected filters or expandByDefault),
-        // force it open even if session storage previously remembered it as collapsed.
-        if (defaultCollapsed === false && (prevDefaultCollapsed !== defaultCollapsed || this.state.isCollapsed)) {
-            if (this.state.isCollapsed) {
-                sessionStorage.setItem(this.storageKey, JSON.stringify(false));
-                this.setState({
-                    isCollapsed: false
-                });
-            }
+    public componentDidMount(): void {
+        // Listen for Escape on the container imperatively rather than via a JSX handler on a static
+        // element. The container is not an interactive control itself; it only catches Escape as it
+        // bubbles up from the filter options (#3900).
+        if (this.componentRef.current) {
+            this.componentRef.current.addEventListener('keydown', this._onContainerKeyDown);
         }
+    }
+
+    public componentWillUnmount(): void {
+        if (this.componentRef.current) {
+            this.componentRef.current.removeEventListener('keydown', this._onContainerKeyDown);
+        }
+    }
+
+    public componentDidUpdate(): void {
+        // Keep user-controlled collapse state; do not force open on parent refresh.
     }
 
     private getNormalizedDefaultCollapsed(defaultCollapsed: boolean | string | undefined): boolean | undefined {
@@ -113,6 +139,21 @@ export class CollapsibleContentComponent extends React.Component<ICollapsibleCon
     }
 
 
+    /**
+     * Sanitizes a template once and reuses the result for subsequent renders.
+     */
+    private getSanitizedTemplate(template: string): string {
+        if (!template) {
+            return template;
+        }
+
+        if (!this.sanitizedTemplates.has(template)) {
+            this.sanitizedTemplates.set(template, DomPurifyHelper.instance.sanitize(template));
+        }
+
+        return this.sanitizedTemplates.get(template);
+    }
+
     public render() {
 
         const groups: IGroup[] = [
@@ -127,10 +168,14 @@ export class CollapsibleContentComponent extends React.Component<ICollapsibleCon
             }
         ];
 
+        // A collapsed group never renders its cell, so the content template is only sanitized
+        // once the group is actually expanded.
+        const contentItem = this.state.isCollapsed
+            ? null
+            : <div key={'template'} dangerouslySetInnerHTML={{ __html: this.getSanitizedTemplate(this.props.contentTemplate) }}></div>;
+
         const groupedList = <GroupedList
-            items={[
-                <div key={'template'} dangerouslySetInnerHTML={{ __html: DomPurifyHelper.instance.sanitize(this.props.contentTemplate) }}></div>
-            ]}
+            items={[contentItem]}
             styles={{
                 root: {
                     selectors: {
@@ -150,7 +195,7 @@ export class CollapsibleContentComponent extends React.Component<ICollapsibleCon
                     onRenderFooter: ((props) => {
 
                         if (!props.group.isCollapsed) {
-                            return <div dangerouslySetInnerHTML={{ __html: DomPurifyHelper.instance.sanitize(this.props.footerTemplate) }}></div>;
+                            return <div dangerouslySetInnerHTML={{ __html: this.getSanitizedTemplate(this.props.footerTemplate) }}></div>;
                         } else {
                             return null;
                         }
@@ -161,6 +206,41 @@ export class CollapsibleContentComponent extends React.Component<ICollapsibleCon
         />;
 
         return <div ref={this.componentRef} data-name={this.props.groupName} data-is-scrollable={true}>{groupedList}</div>;
+    }
+
+    /**
+     * Allow keyboard users to close an opened widget and return to its header (#3900). Escape from
+     * anywhere inside the expanded widget collapses it and moves focus back to the header so it can
+     * be re-opened or navigated away from.
+     */
+    private _onContainerKeyDown(e: KeyboardEvent): void {
+        if (e.key === 'Escape' && !this.state.isCollapsed) {
+            this._collapsePanel();
+        }
+    }
+
+    /**
+     * Collapses the panel (if expanded) and returns focus to the header so keyboard users are not
+     * trapped inside the filter options (#3900).
+     */
+    private _collapsePanel() {
+        if (this.state.isCollapsed) {
+            return;
+        }
+
+        sessionStorage.setItem(this.storageKey, JSON.stringify(true));
+        this.setState({ isCollapsed: true });
+
+        if (this.headerDividerProps?.onToggleCollapse) {
+            this.headerDividerProps.onToggleCollapse(this.headerDividerProps.group);
+        }
+
+        // Restore focus to the header once the collapse has been applied.
+        globalThis.requestAnimationFrame(() => {
+            if (this.headerRef.current) {
+                this.headerRef.current.focus();
+            }
+        });
     }
 
     private _onTogglePanel(props: IGroupDividerProps) {
@@ -176,7 +256,13 @@ export class CollapsibleContentComponent extends React.Component<ICollapsibleCon
     }
 
     private _onRenderHeader(props: IGroupDividerProps): JSX.Element {
-        let textColor: string = this.props.themeVariant && this.props.themeVariant.isInverted ? (this.props.themeVariant ? this.props.themeVariant.semanticColors.bodyText : '#323130') : this.props.themeVariant.semanticColors.inputText;
+        // Keep a reference to the divider props so the panel can be collapsed programmatically
+        // (e.g. on Escape) and stay in sync with the GroupedList internal collapse state (#3900).
+        this.headerDividerProps = props;
+        let textColor: string = this.props.themeVariant?.isInverted
+            ? this.props.themeVariant?.semanticColors?.bodyText ?? '#323130'
+            : this.props.themeVariant?.semanticColors?.inputText ?? '#323130';
+        const warningDescriptionId = `pnp-warning-${(this.props.groupName || 'group').toString().replace(/[^a-zA-Z0-9_-]/g, '-')}`;
         const textComponentStyles: IStyleFunctionOrObject<ITextProps, ITextStyles> = {
             root: {
                 color: textColor
@@ -185,19 +271,73 @@ export class CollapsibleContentComponent extends React.Component<ICollapsibleCon
         return (
             <div style={{ position: 'relative' }}>
                 <div
+                    ref={this.headerRef}
                     className={styles.collapsible__filterPanel__body__group__header}
                     role={"menubar"}
                     tabIndex={0}
                     onClick={() => {
                         this._onTogglePanel(props);
                     }}
-                    onKeyPress={(e) => {
-                        if (e.charCode === 13) {
+                    onKeyDown={(e) => {
+                        // Enter or Space toggles the widget open/closed from the header.
+                        if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+                            e.preventDefault();
                             this._onTogglePanel(props);
                         }
                     }}
                 >
-                    <Text variant={'large'} styles={textComponentStyles}>{props.group.name}</Text>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Text variant={'large'} styles={textComponentStyles}>{props.group.name}</Text>
+                        {this.props.showWarningMarker ?
+                            <>
+                                <TooltipHost content={this.props.warningMarkerTooltip} directionalHint={DirectionalHint.bottomCenter}>
+                                    <button
+                                        type='button'
+                                        title={this.props.warningMarkerTooltip}
+                                        aria-label={this.props.warningMarkerTooltip}
+                                        aria-describedby={warningDescriptionId}
+                                        style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            width: 18,
+                                            height: 18,
+                                            border: '1px solid #d83b01',
+                                            borderRadius: '50%',
+                                            color: '#d83b01',
+                                            background: 'transparent',
+                                            cursor: 'help'
+                                        }}
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                        }}
+                                        onKeyDown={(e) => {
+                                            e.stopPropagation();
+                                        }}
+                                    >
+                                        <Icon iconName='Info' styles={{ root: { color: '#d83b01', fontSize: 12 } }} />
+                                    </button>
+                                </TooltipHost>
+                                <span
+                                    id={warningDescriptionId}
+                                    style={{
+                                        border: 0,
+                                        clip: 'rect(0 0 0 0)',
+                                        height: 1,
+                                        margin: -1,
+                                        overflow: 'hidden',
+                                        padding: 0,
+                                        position: 'absolute',
+                                        width: 1,
+                                        whiteSpace: 'nowrap'
+                                    }}
+                                >
+                                    {this.props.warningMarkerTooltip}
+                                </span>
+                            </>
+                            : null}
+                    </div>
                     <div className={styles.collapsible__filterPanel__body__headerIcon}>
                         {props.group.isCollapsed ?
                             <Icon iconName='ChevronDown' />
@@ -207,7 +347,7 @@ export class CollapsibleContentComponent extends React.Component<ICollapsibleCon
                     </div>
                 </div>
                 {!props.group.isCollapsed ?
-                    <div dangerouslySetInnerHTML={{ __html: DomPurifyHelper.instance.sanitize(this.props.headerTemplate) }}></div>
+                    <div dangerouslySetInnerHTML={{ __html: this.getSanitizedTemplate(this.props.headerTemplate) }}></div>
                     :
                     null
                 }
@@ -232,13 +372,13 @@ export class CollapsibleContentWebComponent extends BaseWebComponent {
 
     public async connectedCallback() {
 
-        const domParser = new DOMParser();
-        const htmlContent: Document = domParser.parseFromString(this.innerHTML, 'text/html');
-
-        // Get the templates
-        const headerTemplateContent = htmlContent.getElementById('collapsible-header');
-        const contentTemplateContent = htmlContent.getElementById('collapsible-content');
-        const footerTemplateContent = htmlContent.getElementById('collapsible-footer');
+        // Read the templates straight from the live DOM. Serializing `this.innerHTML` and
+        // parsing it back with a DOMParser doubles the cost of every render for filters with
+        // a lot of values, and buys nothing: `<template>` content is inert, so the web
+        // components it contains are not upgraded while they sit there.
+        const headerTemplateContent = this.querySelector('#collapsible-header');
+        const contentTemplateContent = this.querySelector('#collapsible-content');
+        const footerTemplateContent = this.querySelector('#collapsible-footer');
 
         let contentTemplate = null;
         let footerTemplate = null;

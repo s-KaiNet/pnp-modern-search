@@ -1,4 +1,4 @@
-define([], function() {
+define([], function () {
     return {
         General: {
             PlaceHolder: {
@@ -8,7 +8,13 @@ define([], function() {
                 ConfigureBtnLabel: "Konfigurer"
             },
             NoAvailableFilterMessage: "Det er ingen tilgjengelige filter.",
-            WebPartDefaultTitle: "Søkefilter"
+            WebPartDefaultTitle: "Søkefilter",
+            StaticPeoplePicker: {
+                RemoveSelectedUserTitle: "Fjern {0}",
+                SearchUsersPlaceholder: "Søk etter brukere",
+                LoadingTenantUsersLabel: "Laster inn leierbrukere...",
+                NoUsersFoundMessage: "Ingen brukere funnet."
+            }
         },
         PropertyPane: {
             ConnectionsPage: {
@@ -16,7 +22,8 @@ define([], function() {
                 UseDataResultsFromComponentsLabel: "Bruk data fra disse nettdelene",
                 UseDataResultsFromComponentsDescription: "Om du kobler til mer enn 1 nettdel slås filterverdiene sammen til liknende filternavn.",
                 LinkToVerticalLabel: "Vis filtre bare når følgende vertikaler er valgt",
-                LinkToVerticalLabelHoverMessage: "Filtrene vil bare vises hvis den valgte vertikalen samsvarer med de som er konfigurert for denne webdelen. Ellers vil webdelen være tom (ingen marg og ingen utfylling) i visningsmodus."
+                LinkToVerticalLabelHoverMessage: "Filtrene vil bare vises hvis den valgte vertikalen samsvarer med de som er konfigurert for denne webdelen. Ellers vil webdelen være tom (ingen marg og ingen utfylling) i visningsmodus.",
+                BidirectionalConnectionWarning: "En eller flere tilkoblede søkeresultat-webdeler er ikke konfigurert til å koble tilbake til denne filter-webdelen. Begge webdelene må være koblet til hverandre for at filtre skal fungere korrekt."
             },
             FiltersSettingsPage: {
                 SettingsGroupName: "Filterinnstillinger",
@@ -27,9 +34,15 @@ define([], function() {
                 FilterNameLabel: "Felt for filter",
                 FilterMaxBuckets: "Antall verdier",
                 FilterMaxBucketsWarning: "Maksimalt antall verdier er 1000",
+                FilterLimitReachedWarningToggle: "Vis advarsel når grensen er nådd",
+                FilterLimitReachedWarningMessage: "Resultatgrensen er nådd — ikke alle samsvarende elementer vises. Avgrens listen ved å gjøre søket mer spesifikt.",
+                EditModeRefinerLimitReachedWarningMessage: "I redigeringsmodus er filtrene begrenset til maksimalt 100 elementer.",
+                PeopleTemplateQUserMappingWarning: "Advarsel for personmal: verdiene ser ikke ut som brukeridentiteter. Denne egenskapen er sannsynligvis ikke mappet til en Q_USER-crawlet egenskap.",
                 FilterDisplayName: "Visningsnavn",
                 FilterTemplate: "Mal",
                 FilterExpandByDefault: "Utvid som standard",
+                ExpandAllNodesByDefault: "Utvid alle noder som standard",
+                HideNodesNotInDataSet: "Skjul noder som ikke finnes i det gjeldende datasettet",
                 // FilterType: "Filtertype",
                 FilterTypeRefiner: "Denne filtermalen fungerer som en refiner og mottar/sender tilgjengelige/valgte verdier fra/til den tilkoblede datakilden.",
                 FilterTypeStaticFilter: "Denne filtermalen fungerer som et statisk filter og sender angitte verdier til den tilkoblede datakilden. Innkommende filterverdier har ingen effekt.",
@@ -48,7 +61,9 @@ define([], function() {
                     ComboBoxTemplate: "Kombinasjonsboks",
                     DateIntervalTemplate: "Datointervall (faste intervaller)",
                     PeopleTemplate: "Person mal",
-                    TaxonomyPickerTemplate: "Taksonomivelger"
+                    StaticPeopleTemplate: "Statisk personmal",
+                    TaxonomyPickerTemplate: "Taksonomivelger",
+                    HierarchicalFilterTemplate: "Hierarkisk filter"
                 },
                 SortBy: "Sorter verdier etter",
                 SortDirection: "Sorteringsretning",
@@ -66,6 +81,12 @@ define([], function() {
                 ErrorTemplateResolve: "Det går ikke å vise denne malen. Feil: '{0}'",
                 FiltersTemplateFieldLabel: "Rediger filtermal",
                 FiltersTemplatePanelHeader: "Rediger filtermal"
+            },
+            InformationPage: {
+                Extensibility: {
+                    PanelHeader: "Konfigurer utvidelsesbibliotek som skal lastes ved oppstart.",
+                    PanelDescription: "Legg til / fjern ID-en til ditt tilpassede utvidelsesbibliotek her. Du kan angi et visningsnavn og bestemme om biblioteket skal lastes ved oppstart eller ikke. Her lastes kun tilpassede filtermaler, filterkontroller, web-komponenter og Handlebars-hjelpere."
+                }
             }
         },
         Styling: {

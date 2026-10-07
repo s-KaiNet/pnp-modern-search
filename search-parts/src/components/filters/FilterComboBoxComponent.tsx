@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { BaseWebComponent, IDataFilterValueInfo, ExtensibilityConstants, IDataFilterInfo, FilterConditionOperator } from '@pnp/modern-search-extensibility';
 import * as ReactDOM from 'react-dom';
-import { IComboBoxOption, Label, Icon, SelectableOptionMenuItemType, ComboBox, IComboBox, Fabric } from '@fluentui/react';
+import { IComboBoxOption, Label, Icon, SelectableOptionMenuItemType, ComboBox, IComboBox, Fabric, ITheme, getTheme } from '@fluentui/react';
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
 import update from 'immutability-helper';
 import styles from './FilterComboBoxComponent.module.scss';
@@ -89,6 +89,7 @@ export interface IFilterComboBoxState {
 export class FilterComboBox extends React.Component<IFilterComboBoxProps, IFilterComboBoxState> {
 
     private comboRef = React.createRef<IComboBox>();
+    private static readonly GLOBAL_BUSY_CURSOR_STYLE_ID = 'pnp-modern-search-busy-cursor-style';
 
     /**
      * The initial options passed to the combo box
@@ -99,6 +100,28 @@ export class FilterComboBox extends React.Component<IFilterComboBoxProps, IFilte
      * The initial selected values derived from initial options. We use this property to see if the control has been changed by the user.
      */
     private _initialSelectedValues: IDataFilterValueInfo[] = [];
+
+    private _setImmediateProgressCursor(): void {
+        if (!globalThis.document) {
+            return;
+        }
+
+        if (globalThis.document.documentElement) {
+            globalThis.document.documentElement.style.setProperty('cursor', 'progress', 'important');
+        }
+
+        if (globalThis.document.body) {
+            globalThis.document.body.style.setProperty('cursor', 'progress', 'important');
+        }
+
+        const styleId = FilterComboBox.GLOBAL_BUSY_CURSOR_STYLE_ID;
+        if (!globalThis.document.getElementById(styleId)) {
+            const styleElement = globalThis.document.createElement('style');
+            styleElement.id = styleId;
+            styleElement.textContent = '* { cursor: progress !important; }';
+            globalThis.document.head.appendChild(styleElement);
+        }
+    }
 
     public constructor(props: IFilterComboBoxProps) {
         
@@ -123,6 +146,9 @@ export class FilterComboBox extends React.Component<IFilterComboBoxProps, IFilte
     public render() {
 
         let options = this.state.options;
+        const theme = (this.props.themeVariant as ITheme) || getTheme();
+        const surfaceColor = theme.semanticColors.bodyBackground ?? '#ffffff';
+        const textColor = theme.semanticColors.inputText ?? '#323130';
 
         let foundValuesCount = 0;
         // Filter the current collection by the search value
@@ -152,8 +178,29 @@ export class FilterComboBox extends React.Component<IFilterComboBoxProps, IFilte
         }
 
         let renderIcon: JSX.Element = null;
-        let renderCombo: JSX.Element =  <Fabric>
+        let renderCombo: JSX.Element =  <Fabric theme={theme}>
                                             <ComboBox 
+                                                theme={theme}
+                                                calloutProps={{
+                                                    styles: {
+                                                        calloutMain: {
+                                                            backgroundColor: surfaceColor
+                                                        }
+                                                    }
+                                                }}
+                                                comboBoxOptionStyles={{
+                                                    root: {
+                                                        backgroundColor: surfaceColor,
+                                                        color: theme.semanticColors.bodyText
+                                                    },
+                                                    rootHovered: {
+                                                        backgroundColor: theme.semanticColors.listItemBackgroundHovered,
+                                                        color: theme.semanticColors.bodyText
+                                                    },
+                                                    optionText: {
+                                                        color: theme.semanticColors.bodyText
+                                                    }
+                                                }}
                                                 allowFreeform={true}
                                                 text={this.state.searchValue ? this.state.searchValue : this.props.defaultOptions.filter(option => option.selected).map(option => option.text).join(',')}
                                                 componentRef={this.comboRef}
@@ -183,10 +230,13 @@ export class FilterComboBox extends React.Component<IFilterComboBoxProps, IFilte
                                                         width: '90%'
                                                     },
                                                     optionsContainerWrapper: {
-                                                        overflow: 'hidden'
+                                                        overflow: 'hidden',
+                                                        backgroundColor: surfaceColor,
+                                                        color: theme.semanticColors.bodyText
                                                     },
                                                     input: {
-                                                        backgroundColor: 'inherit'
+                                                        backgroundColor: 'inherit',
+                                                        color: textColor
                                                     },
                                                     header:{
                                                         height: '100%'
@@ -203,6 +253,16 @@ export class FilterComboBox extends React.Component<IFilterComboBoxProps, IFilte
             renderIcon =    <Label>
                                 <Icon
                                     iconName='ClearFilter' 
+                                    theme={theme}
+                                    styles={{
+                                        root: {
+                                            color: textColor,
+                                            cursor: 'pointer'
+                                        }
+                                    }}
+                                    role='button'
+                                    tabIndex={0}
+                                    aria-label={strings.Filters.ClearAllFiltersButtonLabel}
                                     onClick={() => {
                                         
                                         if (!this.props.isMulti) {
@@ -219,6 +279,12 @@ export class FilterComboBox extends React.Component<IFilterComboBoxProps, IFilte
                                             }
                                         } else {
                                             this._clearFilters();
+                                        }
+                                    }}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Enter' || event.key === ' ') {
+                                            event.preventDefault();
+                                            (event.currentTarget as HTMLElement).click();
                                         }
                                     }}>
                                 </Icon>
@@ -262,6 +328,7 @@ export class FilterComboBox extends React.Component<IFilterComboBoxProps, IFilte
         let selectedKeys = this.state.selectedOptionKeys;
 
         if (option) {
+            this._setImmediateProgressCursor();
 
             // Determine the selection state
             let updatedSelectedValues: IDataFilterValueInfo[] = [];
@@ -322,6 +389,7 @@ export class FilterComboBox extends React.Component<IFilterComboBoxProps, IFilte
      * Applies all selected filter values for the current filter
      */
     private _applyFilters() {
+        this._setImmediateProgressCursor();
         this.props.onChange(this.state.selectedValues, true, this.state.operator);
     }
 
@@ -329,6 +397,7 @@ export class FilterComboBox extends React.Component<IFilterComboBoxProps, IFilte
      * Clears all selected filters for the current refiner
      */
     private _clearFilters() {
+        this._setImmediateProgressCursor();
         this.props.onClear();
     }
 
@@ -353,7 +422,7 @@ export class FilterComboBox extends React.Component<IFilterComboBoxProps, IFilte
                     <div style={{
                         fontWeight: 'normal',
                         height: '100%',
-                        color: this.props.themeVariant.semanticColors.bodyText,
+                        color: this.props.themeVariant?.semanticColors?.bodyText ?? '#323130',
                         fontSize: 12,
                         marginLeft: -8
                     }}>
@@ -372,7 +441,7 @@ export class FilterComboBox extends React.Component<IFilterComboBoxProps, IFilte
                     <div style={{
                         fontWeight: 'normal',
                         height: '100%',
-                        color: this.props.themeVariant.semanticColors.bodyText,
+                        color: this.props.themeVariant?.semanticColors?.bodyText ?? '#323130',
                         fontSize: 12,
                         marginLeft: 5
                     }}>

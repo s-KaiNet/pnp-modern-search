@@ -1,15 +1,13 @@
-import { ServiceScope } from '@microsoft/sp-core-library';
 import { ISuggestionProvider } from './ISuggestionProvider';
 import { ISuggestion } from './ISuggestion';
-import { IPropertyPaneGroup } from '@microsoft/sp-property-pane';
-import { WebPartContext } from '@microsoft/sp-webpart-base';
+import { ISuggestionProviderContext } from './ISuggestionProviderContext';
 
-export abstract class BaseSuggestionProvider<T> implements ISuggestionProvider {
-    
+export abstract class BaseSuggestionProvider<T, TContext = any> implements ISuggestionProvider {
+
     protected _isZeroTermSuggestionsEnabled: boolean;
     protected _properties!: T;
-    private _context: WebPartContext;
-    protected serviceScope: ServiceScope;
+    private _context: TContext;
+    protected serviceScope: any;
 
     get properties(): T {
         return this._properties;
@@ -26,23 +24,23 @@ export abstract class BaseSuggestionProvider<T> implements ISuggestionProvider {
     set isZeroTermSuggestionsEnabled(isZeroTermSuggestionsEnabled: boolean) {
         this._isZeroTermSuggestionsEnabled = isZeroTermSuggestionsEnabled;
     }
-    
-    get context(): WebPartContext {
+
+    get context(): TContext {
         return this._context;
     }
 
-    set context(context: WebPartContext) {
+    set context(context: TContext) {
         this._context = context;
     }
 
-    public constructor(serviceScope: ServiceScope) {
+    public constructor(serviceScope: any) {
         this.serviceScope = serviceScope;
     }
 
     public onInit(): void | Promise<void> {
     }
 
-    public getPropertyPaneGroupsConfiguration(): IPropertyPaneGroup[] {
+    public getPropertyPaneGroupsConfiguration(): any[] {
 
         // Returns an empty configuration by default
         return [];
@@ -52,11 +50,11 @@ export abstract class BaseSuggestionProvider<T> implements ISuggestionProvider {
         // Do nothing by default      
     }
 
-    public getSuggestions(queryText: string): Promise<ISuggestion[]> {
+    public getSuggestions(queryText: string, suggestionContext?: ISuggestionProviderContext): Promise<ISuggestion[]> {
         throw 'Not implemented';
     }
 
-    public getZeroTermSuggestions(): Promise<ISuggestion[]> {
+    public getZeroTermSuggestions(suggestionContext?: ISuggestionProviderContext): Promise<ISuggestion[]> {
         throw 'Not implemented';
     }
 }

@@ -1,4 +1,4 @@
-define([], function() {
+define([], function () {
     return {
         General: {
             PlaceHolder: {
@@ -8,7 +8,13 @@ define([], function() {
                 ConfigureBtnLabel: "Konfigurovat"
             },
             NoAvailableFilterMessage: "Žádné dostupné filtry k zobrazení.",
-            WebPartDefaultTitle: "Webový díl filtrů vyhledávání"
+            WebPartDefaultTitle: "Webový díl filtrů vyhledávání",
+            StaticPeoplePicker: {
+                RemoveSelectedUserTitle: "Odebrat {0}",
+                SearchUsersPlaceholder: "Hledat uživatele",
+                LoadingTenantUsersLabel: "Načítání uživatelů tenanta...",
+                NoUsersFoundMessage: "Nebyli nalezeni žádní uživatelé."
+            }
         },
         PropertyPane: {
             ConnectionsPage: {
@@ -16,7 +22,8 @@ define([], function() {
                 UseDataResultsFromComponentsLabel: "Použít data z těchto webových dílů",
                 UseDataResultsFromComponentsDescription: "Pokud připojíte více než jeden webový díl, hodnoty a počty filtrů se sloučí pro podobné názvy filtrů.",
                 LinkToVerticalLabel: "Zobrazit filtry pouze při výběru těchto vertikál",
-                LinkToVerticalLabelHoverMessage: "Filtry se zobrazí pouze tehdy, pokud vybraná vertikála odpovídá těm, které jsou nakonfigurovány pro tento webový díl. V opačném případě bude webový díl v režimu zobrazení prázdný (bez okrajů a výplní)."
+                LinkToVerticalLabelHoverMessage: "Filtry se zobrazí pouze tehdy, pokud vybraná vertikála odpovídá těm, které jsou nakonfigurovány pro tento webový díl. V opačném případě bude webový díl v režimu zobrazení prázdný (bez okrajů a výplní).",
+                BidirectionalConnectionWarning: "Jeden nebo více připojených webových dílů výsledků vyhledávání nebylo nakonfigurováno pro zpětné připojení k tomuto webovému dílu filtrů. Oba webové díly musí být vzájemně propojeny, aby filtry fungovaly správně."
             },
             FiltersSettingsPage: {
                 SettingsGroupName: "Nastavení filtrů",
@@ -27,9 +34,15 @@ define([], function() {
                 FilterNameLabel: "Filtrační pole",
                 FilterMaxBuckets: "Počet hodnot",
                 FilterMaxBucketsWarning: "Maximální počet hodnot je 1000",
+                FilterLimitReachedWarningToggle: "Zobrazit upozornění při dosažení limitu",
+                FilterLimitReachedWarningMessage: "Byl dosažen limit výsledků — nejsou zobrazeny všechny odpovídající položky. Upřesněte hledání a zúžte seznam.",
+                EditModeRefinerLimitReachedWarningMessage: "V režimu úprav jsou filtry omezeny na maximálně 100 položek.",
+                PeopleTemplateQUserMappingWarning: "Upozornění šablony osob: hodnoty nevypadají jako identity uživatelů. Tato vlastnost pravděpodobně není mapována na procházenou vlastnost Q_USER.",
                 FilterDisplayName: "Zobrazovaný název",
                 FilterTemplate: "Šablona",
                 FilterExpandByDefault: "Rozbalit ve výchozím nastavení",
+                ExpandAllNodesByDefault: "Rozbalit všechny uzly ve výchozím nastavení",
+                HideNodesNotInDataSet: "Skrýt uzly, které nejsou v aktuální sadě dat",
                 // FilterType: "Typ filtru",
                 FilterTypeRefiner: "Tato šablona filtru funguje jako upřesňující filtr a přijímá/odesílá dostupné/vybrané hodnoty do/z připojeného zdroje dat.",
                 FilterTypeStaticFilter: "Tato šablona filtru funguje jako statický filtr a odesílá pouze libovolně vybrané hodnoty do připojeného zdroje dat. Přicházející hodnoty filtrů nejsou brány v úvahu.",
@@ -48,7 +61,9 @@ define([], function() {
                     ComboBoxTemplate: "Rozbalovací nabídka",
                     DateIntervalTemplate: "Časový interval",
                     PeopleTemplate: "Šablona pro osoby",
-                    TaxonomyPickerTemplate: "Výběr taxonomie"
+                    StaticPeopleTemplate: "Statická šablona osoby",
+                    TaxonomyPickerTemplate: "Výběr taxonomie",
+                    HierarchicalFilterTemplate: "Hierarchický filtr"
                 },
                 SortBy: "Řadit hodnoty podle",
                 SortDirection: "Směr řazení",
@@ -66,6 +81,12 @@ define([], function() {
                 ErrorTemplateResolve: "Nelze načíst zadanou šablonu. Podrobnosti chyby: '{0}'",
                 FiltersTemplateFieldLabel: "Upravit šablonu filtrů",
                 FiltersTemplatePanelHeader: "Upravit šablonu filtrů"
+            },
+            InformationPage: {
+                Extensibility: {
+                    PanelHeader: "Konfigurujte knihovny rozšiřitelnosti pro načtení při spuštění.",
+                    PanelDescription: "Přidejte/odeberte ID vlastní knihovny rozšiřitelnosti zde. Můžete zadat zobrazený název a rozhodnout, zda by knihovna měla být načtena nebo ne při spuštění. Zde budou načtena pouze vlastní rozvržení filtrů, ovládací prvky filtrů, webové komponenty a Handlebars pomocníci."
+                }
             }
         },
         Styling: {

@@ -1,11 +1,13 @@
 import * as React from 'react';
 import { BaseWebComponent, IDataFilter, IDataFilterValue, FilterConditionOperator, FilterComparisonOperator, IDataFilterInfo, ExtensibilityConstants, IDataFilterConfiguration, IDataFilterValueInfo } from '@pnp/modern-search-extensibility';
 import * as ReactDOM from 'react-dom';
-import { Label, Icon, ITheme } from '@fluentui/react';
+import { Label, Icon, ITheme, getTheme } from '@fluentui/react';
 import styles from './SelectedFiltersComponent.module.scss';
 import * as strings from 'CommonStrings';
 import { Log } from '@microsoft/sp-core-library';
 import { DateHelper } from '../../helpers/DateHelper';
+import { TaxonomyHelper } from '../../helpers/TaxonomyHelper';
+import { BuiltinFilterTemplates } from '../../layouts/AvailableTemplates';
 import { TestConstants } from '../../common/Constants';
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
 const SelectedFilters_LogSource = "PnPModernSearch:SelectedFiltersComponent";
@@ -64,73 +66,101 @@ export class SelectedFiltersComponent extends React.Component<ISelectedFiltersPr
 
         let renderSelectedFilterValues: JSX.Element = null;
         const filters = this.props.filters;
+        const renderableFilters = filters.filter(filter => filter.values.length > 0);
 
-        if (filters.length > 0) {
+        if (renderableFilters.length > 0) {
 
-            // Display only filter with values
-            const renderFilters = filters.map((filter: IDataFilter, i) => {
+            // Display only filters with values.
+            const renderFilters = renderableFilters.map((filter: IDataFilter, i) => {
+                let renderValues: JSX.Element[] = null;
+                const operator = this.getConditionOperatorString(filter.operator);
 
-                let filterValuesString;
+                // Get display name of the filter if specified 
+                let filterName = filter.filterName;
+                const currentFilterConfig = this.props.filtersConfiguration.filter(filterConfig => filterConfig.filterName === filter.filterName);
+                if (currentFilterConfig.length === 1) {
+                    filterName = currentFilterConfig[0].displayValue ? currentFilterConfig[0].displayValue : filterName;
+                }
 
-                if (filter.values.length > 0) {
+                const selectedTemplate = currentFilterConfig.length === 1 ? currentFilterConfig[0].selectedTemplate : undefined;
 
-                    let renderValues: JSX.Element[] = null;
-                    let operator = this.getConditionOperatorString(filter.operator);
+                const uniqueDisplayValues: Array<{ displayValue: string; operator: FilterComparisonOperator }> = [];
+                const seenDisplayValues = new Set<string>();
+                const hasReadableDisplayValue = filter.values.some(value => {
+                    const candidate = this.resolveDisplayValue(value.name, value.value, selectedTemplate);
+                    return !!candidate && !this.isTaxonomyTokenDisplayValue(candidate);
+                });
 
-                    // Get display name of the filter if specified 
-                    let filterName = filter.filterName;
-                    const currentFilterConfig = this.props.filtersConfiguration.filter(filterConfig => filterConfig.filterName === filter.filterName);
-                    if (currentFilterConfig.length === 1) {
-                        filterName = currentFilterConfig[0].displayValue ? currentFilterConfig[0].displayValue : filterName;
+                filter.values.forEach(value => {
+                    let displayValue = this.props.dayjs && this.props.dayjs(value.value).isValid()
+                        ? this.props.dayjs(value.value).format('LL')
+                        : this.resolveDisplayValue(value.name, value.value, selectedTemplate);
+
+                    // For taxonomy filters (GPP/GP0 tokens), extract the label if name is not set
+                    if (!displayValue || displayValue.indexOf("GPP|#") === 0 || displayValue.indexOf("GP0|#") === 0) {
+                        // Try to extract label from the token value field
+                        const labelFromToken = this.extractLabelFromToken(value.value);
+                        if (labelFromToken) {
+                            displayValue = labelFromToken;
+                        }
                     }
 
-                    renderValues = filter.values.map((value, j) => {
-                        let displayValue = this.props.dayjs && this.props.dayjs(value.value).isValid() ? this.props.dayjs(value.value).format('LL') : value.name;
+                    if (hasReadableDisplayValue && this.isTaxonomyTokenDisplayValue(displayValue)) {
+                        return;
+                    }
 
-                        if (displayValue.indexOf("i:0#") > -1) {
-                            //displayValue = displayValue.split("|")[1] + " (" + displayValue.split("|")[0] +")";  //like [PeopleCheckBox=" Lee Gu (LeeG@tcwlv.onmicrosoft.com )"]
-                            displayValue = displayValue.split("|")[1];  //like [PeopleCheckBox=" Lee Gu"]
-                        }
+                    if (displayValue && displayValue.indexOf("i:0#") > -1) {
+                        //displayValue = displayValue.split("|")[1] + " (" + displayValue.split("|")[0] +")";  //like [PeopleCheckBox=" Lee Gu (LeeG@tcwlv.onmicrosoft.com )"]
+                        displayValue = displayValue.split("|")[1];  //like [PeopleCheckBox=" Lee Gu"]
+                    }
 
-                        const filterString = `${filterName}${this.getComparisonOperatorString(value.operator)}"${displayValue}"`;
-                        filterValuesString = `${filterString}`;
-                        let renderFilterValues = null;
+                    const normalizedDisplayValue = displayValue ? displayValue.trim().toLocaleLowerCase() : '';
+                    if (normalizedDisplayValue.length > 0 && !seenDisplayValues.has(normalizedDisplayValue)) {
+                        seenDisplayValues.add(normalizedDisplayValue);
+                        uniqueDisplayValues.push({
+                            displayValue,
+                            operator: value.operator
+                        });
+                    }
+                });
 
-                        if (j < filter.values.length - 1) {
-                            renderFilterValues = <span className={styles.operator} style={{ marginLeft: 5, marginRight: 5 }}>{`${operator}`}</span>;
-                            filterValuesString = `${filterValuesString} ${operator}`;
-                        }
+                renderValues = uniqueDisplayValues.map((entry, j) => {
+                    const filterString = `${filterName}${this.getComparisonOperatorString(entry.operator)}"${entry.displayValue}"`;
+                    let renderFilterValues = null;
 
-                        return <>
-                            {filterString}
-                            {renderFilterValues}
-                        </>;
-                    });
+                    if (j < uniqueDisplayValues.length - 1) {
+                        renderFilterValues = <span className={styles.operator} style={{ marginLeft: 5, marginRight: 5 }}>{`${operator}`}</span>;
+                    }
 
-                    return <>
+                    return <React.Fragment key={`${filter.filterName}-${entry.displayValue}-${j}`}>
+                        {filterString}
+                        {renderFilterValues}
+                    </React.Fragment>;
+                });
+
+                return <React.Fragment key={`${filter.filterName}-${i}`}>
+                    <div className={styles.filterRow}>
+                        <Label theme={(this.props.themeVariant as ITheme) || getTheme()}>
+                            <Icon iconName='ClearFilter'
+                                data-ui-test-id={TestConstants.SelectedFiltersClearFilter}
+                                theme={(this.props.themeVariant as ITheme) || getTheme()}
+                                onClick={() => {
+                                    // Remove all the values for that filter
+                                    this._onRemovefilter(filter.filterName, filter.values, this.props.instanceId);
+                                }}>
+                            </Icon>
+                        </Label>
+                        <Label className={styles.filterRowValues} style={{ minWidth: 0 }} theme={(this.props.themeVariant as ITheme) || getTheme()}>
+                            <div className={styles.ellipsis}>[{renderValues}]</div>
+                        </Label>
+                    </div>
+                    {i < renderableFilters.length - 1 ?
                         <div className={styles.filterRow}>
-                            <Label theme={this.props.themeVariant as ITheme}>
-                                <Icon iconName='ClearFilter'
-                                    data-ui-test-id={TestConstants.SelectedFiltersClearFilter}
-                                    theme={this.props.themeVariant as ITheme}
-                                    onClick={() => {
-                                        // Remove all the values for that filter
-                                        this._onRemovefilter(filter.filterName, filter.values, this.props.instanceId);
-                                    }}>
-                                </Icon>
-                            </Label>
-                            <Label className={styles.filterRowValues} style={{ minWidth: 0 }} theme={this.props.themeVariant as ITheme}>
-                                <div className={styles.ellipsis}>[{renderValues}]</div>
-                            </Label>
+                            <Label className={styles.operator} theme={(this.props.themeVariant as ITheme) || getTheme()}>{`${this.getConditionOperatorString(this.props.operator as FilterConditionOperator)}`}</Label>
                         </div>
-                        {i < filters.length - 1 && filter.values.length > 0 ?
-                            <div className={styles.filterRow}>
-                                <Label className={styles.operator} theme={this.props.themeVariant as ITheme}>{`${this.getConditionOperatorString(this.props.operator as FilterConditionOperator)}`}</Label>
-                            </div>
-                            : null
-                        }
-                    </>;
-                }
+                        : null
+                    }
+                </React.Fragment>;
             });
 
             renderSelectedFilterValues = <div className={styles.selectedFilters}>
@@ -170,6 +200,83 @@ export class SelectedFiltersComponent extends React.Component<ISelectedFiltersPr
         } else {
             Log.info(SelectedFilters_LogSource, `Unable to find the data filter WP. Did you forget to add the 'instance-id' attribute to the 'pnp-selectedfilters' component?`);
         }
+    }
+
+    private extractLabelFromToken = (tokenValue: string): string => {
+        if (!tokenValue) return null;
+
+        try {
+            // Handle encoded hex format (ǂǂHEX)
+            let decodedToken = tokenValue;
+            if (tokenValue.startsWith('"') && tokenValue.includes('ǂǂ')) {
+                const hexPart = tokenValue.slice(tokenValue.indexOf('ǂǂ') + 2, -1); // Remove quotes and ǂǂ prefix
+                const hexPairs = hexPart.match(/.{1,2}/g);
+                if (hexPairs) {
+                    decodedToken = String.fromCharCode(...hexPairs.map(hex => parseInt(hex, 16)));
+                } else {
+                    return null;
+                }
+            }
+
+            // Extract label from taxonomy token patterns like:
+            // - GPP|#GUID|Label or GPP|#0|Label (parent)
+            // - GP0|#GUID|Label (leaf)
+            // - or(...) patterns
+            const labelRegex = /\|#[^|]*\|([^|;)]+)/;
+            const match = decodedToken.match(labelRegex);
+            if (match && match[1]) {
+                return match[1];
+            }
+
+            // Try to extract from L0|#GUID|Label pattern
+            const l0Regex = /L0\|#[^|]*\|([^|;)]+)/;
+            const l0Match = decodedToken.match(l0Regex);
+            if (l0Match && l0Match[1]) {
+                return l0Match[1];
+            }
+        } catch {
+            // Fail silently and return null
+            Log.warn(SelectedFilters_LogSource, `Failed to extract label from token: ${tokenValue}`);
+        }
+
+        return null;
+    }
+
+    private isTaxonomyTokenDisplayValue = (value: string): boolean => {
+        const normalizedValue = TaxonomyHelper.normalizeReadableLabelCandidate(value);
+        return /^(?:GPP|GP0|L0)\|#/i.test(normalizedValue)
+            || normalizedValue.startsWith('ǂǂ');
+    }
+
+    private resolveDisplayValue(name: string, value: string, selectedTemplate?: string): string {
+        const rawName = `${name ?? ''}`.trim();
+        const rawValue = `${value ?? ''}`.trim();
+
+        if (selectedTemplate === BuiltinFilterTemplates.People) {
+            const displayNameFromValue = this.extractPeopleDisplayValue(rawValue);
+            if (displayNameFromValue) {
+                return displayNameFromValue;
+            }
+        }
+
+        return rawName || rawValue;
+    }
+
+    private extractPeopleDisplayValue(rawValue: string): string {
+        const preferredDisplayLabel = TaxonomyHelper.extractPreferredPeopleDisplayLabel(rawValue);
+        if (preferredDisplayLabel) {
+            return preferredDisplayLabel;
+        }
+
+        const cleanedValue = TaxonomyHelper.normalizeReadableLabelCandidate(rawValue);
+        const decodedValue = TaxonomyHelper.decodeHexString(cleanedValue);
+
+        const claimsLabel = TaxonomyHelper.extractClaimsLabel(decodedValue || cleanedValue);
+        if (claimsLabel) {
+            return claimsLabel;
+        }
+
+        return '';
     }
 
     private getConditionOperatorString(operator: FilterConditionOperator): string {
@@ -227,7 +334,7 @@ export class SelectedFiltersWebComponent extends BaseWebComponent {
 
     public async connectedCallback() {
 
-        const dateHelper = this._serviceScope.consume<DateHelper>(DateHelper.ServiceKey);
+        const dateHelper: DateHelper = this._serviceScope.consume(DateHelper.ServiceKey);
         const dayjs = await dateHelper.moment();
 
         let props = this.resolveAttributes();

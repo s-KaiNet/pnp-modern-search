@@ -6,17 +6,24 @@
 
 		<pnp-filtersearchbox data-filter="{{JSONstringify filter}}" data-instance-id="{{@root.instanceId}}"></pnp-filtersearchbox>
 	
+		<!-- The theme is serialized once here: every 'pnp-*' component below resolves it from
+		     the closest ancestor carrying a 'data-theme-variant' attribute. Repeating it on
+		     each value makes the rendered markup grow by ~13 KB per value. -->
+		<div role="{{#if filter.isMulti}}group{{else}}radiogroup{{/if}}" aria-label="{{filter.displayName}}" data-theme-variant="{{JSONstringify @root.theme}}">
 		{{#each filter.values}}
-			<pnp-filtercheckbox 
-				data-filter-name="{{filter.filterName}}" 
-				data-name="{{name}}" 
-				data-value="{{value}}" 
-				data-selected="{{selected}}" 
+			<pnp-filtercheckbox
+				data-filter-name="{{filter.filterName}}"
+				data-name="{{name}}"
+				data-value="{{value}}"
+				data-selected="{{selected}}"
 				data-disabled="{{disabled}}"
-				data-theme-variant="{{JSONstringify @root.theme}}"
+				data-is-multi="{{../isMulti}}"
+				data-value-count="{{../values.length}}"
+				data-value-index="{{@index}}"
 			>
 			</pnp-filtercheckbox>
 		{{/each}}
+		</div>
 		
 		{{#eq filter.values.length 0}}
 			<div>{{@root.strings.FilterNoValuesMessage}}</div>

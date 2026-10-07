@@ -1,4 +1,4 @@
-define([], function() {
+define([], function () {
     return {
         General: {
             PlaceHolder: {
@@ -8,7 +8,13 @@ define([], function() {
                 ConfigureBtnLabel: "Konfigurieren"
             },
             NoAvailableFilterMessage: "Keine Filter zum Anzeigen verfügbar.",
-            WebPartDefaultTitle: "Suchfilter Web Part"
+            WebPartDefaultTitle: "Suchfilter Web Part",
+            StaticPeoplePicker: {
+                RemoveSelectedUserTitle: "{0} entfernen",
+                SearchUsersPlaceholder: "Benutzer suchen",
+                LoadingTenantUsersLabel: "Mandantenbenutzer werden geladen...",
+                NoUsersFoundMessage: "Keine Benutzer gefunden."
+            }
         },
         PropertyPane: {
             ConnectionsPage: {
@@ -16,7 +22,8 @@ define([], function() {
                 UseDataResultsFromComponentsLabel: "Benutze Daten von diesen Webparts",
                 UseDataResultsFromComponentsDescription: "Wenn mehr als ein Webpart verbunden ist, dann werden die Filter Werte und die Anzahl für ähnliche Filter Namen zusammengeführt.",
                 LinkToVerticalLabel: "Zeige Filter nur an, wenn folgende Vertikale ausgewählt sind",
-                LinkToVerticalLabelHoverMessage: "Diese Filter werden nur angezeigt, wenn das ausgewählte Vertikal mit einem der für dieses Webpart konfigurierten übereinstimmt. Ansonsten bleibt das Webpart im Anzeigemodus leer (kein Rand)."
+                LinkToVerticalLabelHoverMessage: "Diese Filter werden nur angezeigt, wenn das ausgewählte Vertikal mit einem der für dieses Webpart konfigurierten übereinstimmt. Ansonsten bleibt das Webpart im Anzeigemodus leer (kein Rand).",
+                BidirectionalConnectionWarning: "Ein oder mehrere verbundene Suchergebnis-Webparts wurden nicht so konfiguriert, dass sie eine Rückverbindung zu diesem Filter-Webpart herstellen. Beide Webparts müssen miteinander verbunden sein, damit die Filter korrekt funktionieren."
             },
             FiltersSettingsPage: {
                 SettingsGroupName: "Filter Einstellungen",
@@ -27,9 +34,15 @@ define([], function() {
                 FilterNameLabel: "Filter Feld",
                 FilterMaxBuckets: "# der Werte",
                 FilterMaxBucketsWarning: "Die maximale Anzahl von Werten ist 1000",
+                FilterLimitReachedWarningToggle: "Warnung anzeigen, wenn das Limit erreicht ist",
+                FilterLimitReachedWarningMessage: "Ergebnislimit erreicht — nicht alle passenden Elemente werden angezeigt. Verfeinern Sie Ihre Suche, um die Liste einzugrenzen.",
+                EditModeRefinerLimitReachedWarningMessage: "Im Bearbeitungsmodus sind Verfeinerer auf maximal 100 Elemente begrenzt.",
+                PeopleTemplateQUserMappingWarning: "Warnung für Personenvorlage: Die Werte sehen nicht wie Benutzeridentitäten aus. Diese Eigenschaft ist wahrscheinlich nicht einer Q_USER-Crawleigenschaft zugeordnet.",
                 FilterDisplayName: "Anzeige name",
                 FilterTemplate: "Vorlage",
                 FilterExpandByDefault: "Standardmäßig erweitert",
+                ExpandAllNodesByDefault: "Alle Knoten standardmäßig erweitern",
+                HideNodesNotInDataSet: "Knoten ausblenden, die nicht im aktuellen Datensatz enthalten sind",
                 FilterType: "Filter Typ",
                 FilterTypeRefiner: "Diese Filter Vorlage agiert als ein Verfeinerer und erhält/sendet verfügbare/ausgewählte Werte von/zu einer verbundenen Datenquelle.",
                 FilterTypeStaticFilter: "Diese Filter Vorlage agiert als ein statischer Filter und sendet nur willkürlich ausgewählte Werte zu der verbundenen Datenquelle. Einkommende Filter Werte werden nicht beachtet.",
@@ -48,7 +61,9 @@ define([], function() {
                     ComboBoxTemplate: "Combobox",
                     DateIntervalTemplate: "Datums Interval",
                     PeopleTemplate: "Personenvorlage",
-                    TaxonomyPickerTemplate: "Taxonomy Picker"
+                    StaticPeopleTemplate: "Statische Personenvorlage",
+                    TaxonomyPickerTemplate: "Taxonomy Picker",
+                    HierarchicalFilterTemplate: "Hierarchischer Filter"
                 },
                 SortBy: "Sortiere Werte nach",
                 SortDirection: "Sortier Richtung",
@@ -66,13 +81,21 @@ define([], function() {
                 ErrorTemplateResolve: "Kann die angegebene Vorlage nicht auflösen. Fehler Details: '{0}'",
                 FiltersTemplateFieldLabel: "Filter Vorlage bearbeiten",
                 FiltersTemplatePanelHeader: "Filter Vorlage bearbeiten"
-            }        },
+            },
+            InformationPage: {
+                Extensibility: {
+                    PanelHeader: "Erweiterungsbibliotheken, die beim Start geladen werden, konfigurieren",
+                    PanelDescription: "Hier können Sie die IDs Ihrer benutzerdefinierten Erweiterungsbibliotheken hinzufügen/entfernen. Sie können einen Anzeigenamen angeben und entscheiden, ob die Bibliothek beim Starten geladen werden soll oder nicht. Nur benutzerdefinierte Filterlayouts, Filtersteuerelemente, Webkomponenten und Handlebars-Helfer werden hier geladen."
+                }
+            }
+        },
         Styling: {
             StylingOptionsGroupName: "Stiloptionen",
             FilterBackgroundColorLabel: "Filter-Hintergrundfarbe",
             FilterBorderColorLabel: "Filter-Rahmenfarbe",
             FilterBorderThicknessLabel: "Filter-Rahmenstärke",
             ResetToDefaultLabel: "Styling auf Standard zurücksetzen",
-            ResetToDefaultDescription: "Alle Styling-Optionen auf ihre Standardwerte zurücksetzen"        }
+            ResetToDefaultDescription: "Alle Styling-Optionen auf ihre Standardwerte zurücksetzen"
+        }
     }
 });

@@ -1,4 +1,4 @@
-"use client"; /* eslint-disable @typescript-eslint/no-non-null-assertion */
+"use client";
 import * as React from "react";
 import * as ReactDOM from "react-dom";
 import {
@@ -11,8 +11,6 @@ import {
   StickyPositionType,
   ScrollablePane,
   ScrollbarVisibility,
-} from "@fluentui/react";
-import {
   ITooltipHostProps,
   TooltipHost,
   ITooltipStyles,
@@ -23,6 +21,8 @@ import {
   mergeStyleSets,
   ITheme,
   Selection,
+  IconButton,
+  getTheme,
 } from "@fluentui/react";
 import * as Handlebars from "handlebars";
 import { IReadonlyTheme } from "@microsoft/sp-component-base";
@@ -54,6 +54,7 @@ import {
   IDetailsCheckboxProps,
   ConstrainMode,
   IDetailsList,
+  IDetailsColumnProps,
 } from "@fluentui/react/lib/DetailsList";
 import { ISearchResultsTemplateContext } from "../models/common/ITemplateContext";
 import { ObjectHelper } from "../helpers/ObjectHelper";
@@ -158,6 +159,12 @@ export interface IDetailsListColumnConfiguration {
    * Enable multiline column
    */
   isMultiline: boolean;
+
+  /**
+   * Optional description shown as a tooltip on an info icon in the column header.
+   * Leave empty to show no icon.
+   */
+  columnDescription?: string;
 
   /**
    * Callback handler when a sort field and direction are selected
@@ -441,6 +448,9 @@ export class DetailsListComponent extends React.Component<
               value: column.valueSorting,
             },
             isPadded: true,
+            onRenderHeader: (headerProps?: IDetailsColumnProps) => {
+              return this._onRenderColumnHeaderWithInfo(column, headerProps);
+            },
             onRender: (item: any) => {
               let value: any;
               let renderColumnValue: JSX.Element = null;
@@ -461,9 +471,8 @@ export class DetailsListComponent extends React.Component<
                 }
               } else {
                 // A field has been selected
-                value = ObjectHelper.byPath(item, column.value);
+                value = this._resolveColumnValue(item, column.value);
               }
-
               const tempColumnValueAsHtml = new DOMParser().parseFromString(
                 `<span>${value ?? ""}</span>`,
                 "text/html"
@@ -552,7 +561,7 @@ export class DetailsListComponent extends React.Component<
 
     let shimmeredDetailsListProps: IShimmeredDetailsListProps = {
       componentRef: this._detailsListRef,
-      theme: this.props.themeVariant as ITheme,
+      theme: (this.props.themeVariant as ITheme) || getTheme(),
       items: items,
       compact: this.props.isCompact,
       columns: columns,
@@ -580,6 +589,20 @@ export class DetailsListComponent extends React.Component<
         shimmeredDetailsListProps.groups = this.state.groups;
         shimmeredDetailsListProps.groupProps = {
         showEmptyGroups: true,
+        headerProps: {
+          onRenderGroupHeaderCheckbox: () => null,
+          styles: {
+            headerCount: {
+              color: this.props.themeVariant?.semanticColors?.bodyText,
+            },
+            title: {
+              color: this.props.themeVariant?.semanticColors?.bodyText,
+            },
+            expand: {
+              color: this.props.themeVariant?.semanticColors?.bodyText,
+            },
+          },
+        },
       };
     }
 
@@ -593,9 +616,9 @@ export class DetailsListComponent extends React.Component<
 
       return (
         <Fabric>
-          <div 
-            style={{ 
-              height: containerHeight, 
+          <div
+            style={{
+              height: containerHeight,
               position: "relative"
             }}
           >
@@ -751,9 +774,9 @@ export class DetailsListComponent extends React.Component<
     if (showCheckbox) {
       shimmerElementsRow.push(
         <ShimmerElementsGroup
-          theme={this.props.themeVariant as ITheme}
+          theme={(this.props.themeVariant as ITheme) || getTheme()}
           backgroundColor={
-            this.props.themeVariant.semanticColors.bodyBackground
+            this.props.themeVariant?.semanticColors?.bodyBackground ?? "#ffffff"
           }
           key={"checkboxGap"}
           shimmerElements={[
@@ -807,11 +830,11 @@ export class DetailsListComponent extends React.Component<
 
       shimmerElementsRow.push(
         <ShimmerElementsGroup
-          theme={this.props.themeVariant as ITheme}
+          theme={(this.props.themeVariant as ITheme) || getTheme()}
           key={columnIdx}
           width={`${groupWidth}px`}
           backgroundColor={
-            this.props.themeVariant.semanticColors.bodyBackground
+            this.props.themeVariant?.semanticColors?.bodyBackground ?? "#ffffff"
           }
           shimmerElements={shimmerElements}
         />
@@ -822,8 +845,8 @@ export class DetailsListComponent extends React.Component<
       <ShimmerElementsGroup
         key={"endGap"}
         width={"100%"}
-        backgroundColor={this.props.themeVariant.semanticColors.bodyBackground}
-        theme={this.props.themeVariant as ITheme}
+        backgroundColor={this.props.themeVariant?.semanticColors?.bodyBackground ?? "#ffffff"}
+        theme={(this.props.themeVariant as ITheme) || getTheme()}
         shimmerElements={[
           { type: ShimmerElementType.gap, width: "100%", height: gapHeight },
         ]}
@@ -831,7 +854,7 @@ export class DetailsListComponent extends React.Component<
     );
     return (
       <Shimmer
-        theme={this.props.themeVariant as ITheme}
+        theme={(this.props.themeVariant as ITheme) || getTheme()}
         customElementsGroup={
           <div style={{ display: "flex" }}>{shimmerElementsRow}</div>
         }
@@ -846,7 +869,7 @@ export class DetailsListComponent extends React.Component<
           ...rowProps.styles,
           root: {
             backgroundColor:
-              this.props.themeVariant.semanticColors.bodyBackgroundChecked,
+              this.props.themeVariant?.semanticColors?.bodyBackgroundChecked ?? "#f3f2f1",
           },
         };
       }
@@ -862,7 +885,7 @@ export class DetailsListComponent extends React.Component<
       }
 
       return (
-        <DetailsRowCheck {...props} theme={this.props.themeVariant as ITheme} />
+        <DetailsRowCheck {...props} theme={(this.props.themeVariant as ITheme) || getTheme()} />
       );
     };
 
@@ -877,24 +900,65 @@ export class DetailsListComponent extends React.Component<
             : undefined
         }
       >
-        <DetailsRow {...rowProps} theme={this.props.themeVariant as ITheme} />
+        <DetailsRow {...rowProps} theme={(this.props.themeVariant as ITheme) || getTheme()} />
       </div>
     );
   }
 
+  private readonly _onRenderColumnHeaderWithInfo = (column: IDetailsListColumnConfiguration, headerProps?: IDetailsColumnProps): JSX.Element => {
+    const hasDescription = !!column.columnDescription?.trim();
+    const columnWidth = headerProps?.column?.calculatedWidth ?? headerProps?.column?.currentWidth ?? 999;
+    const showIcon = hasDescription && columnWidth >= 30;
+    const sliderStyles = detailsListStyles as unknown as Record<string, string>;
+
+    return (
+      <div className={sliderStyles.columnHeaderWithInfo}>
+        <span
+          className={sliderStyles.columnHeaderTitle}
+          title={column.name}
+        >
+          {column.name}
+        </span>
+        {showIcon && (
+          <TooltipHost content={column.columnDescription} calloutProps={{ gapSpace: 0 }}>
+            <IconButton
+              iconProps={{ iconName: "Info" }}
+              styles={{
+                root: {
+                  padding: "0 4px",
+                  height: "24px",
+                  width: "24px",
+                  minWidth: "24px",
+                  flexShrink: 0,
+                },
+                icon: {
+                  color: this.props.themeVariant?.semanticColors?.bodySubtext,
+                  fontSize: "12px",
+                },
+                rootHovered: {
+                  backgroundColor: this.props.themeVariant?.semanticColors?.listHeaderBackgroundHovered,
+                },
+              }}
+              ariaLabel={`More information about ${column.name}`}
+            />
+          </TooltipHost>
+        )}
+      </div>
+    );
+  };
+
   private _onRenderColumnHeaderTooltip = (tooltipHostProps: ITooltipHostProps): JSX.Element => {
     const customStyles: Partial<ITooltipStyles> = {};
     customStyles.root = {
-      backgroundColor: this.props.themeVariant.semanticColors.listBackground,
-      color: this.props.themeVariant.semanticColors.listText,
+      backgroundColor: this.props.themeVariant?.semanticColors?.listBackground ?? "#ffffff",
+      color: this.props.themeVariant?.semanticColors?.listText ?? "#323130",
       selectors: {
         ":hover": {
           backgroundColor:
-            this.props.themeVariant.semanticColors
-              .listHeaderBackgroundHovered,
+            this.props.themeVariant?.semanticColors?.listHeaderBackgroundHovered ?? "#f3f2f1",
         },
         i: {
-          color: this.props.themeVariant.semanticColors.listText,
+          color: this.props.themeVariant?.semanticColors?.listText ?? "#323130",
         },
       },
     };
@@ -909,7 +973,7 @@ export class DetailsListComponent extends React.Component<
     return (
       <TooltipHost
         {...tooltipHostProps}
-        theme={this.props.themeVariant as ITheme}
+        theme={(this.props.themeVariant as ITheme) || getTheme()}
         styles={customStyles}
       />
     );
@@ -923,7 +987,7 @@ export class DetailsListComponent extends React.Component<
 
     return defaultRender!({
       ...props,
-      theme: this.props.themeVariant as ITheme,
+      theme: (this.props.themeVariant as ITheme) || getTheme(),
     });
   }
 
@@ -933,22 +997,22 @@ export class DetailsListComponent extends React.Component<
   ): JSX.Element {
 
     return (
-      <Sticky stickyPosition={StickyPositionType.Header} isScrollSynced={true} stickyBackgroundColor={this.props.themeVariant.semanticColors.listBackground}>
+      <Sticky stickyPosition={StickyPositionType.Header} isScrollSynced={true} stickyBackgroundColor={this.props.themeVariant?.semanticColors?.listBackground ?? "#ffffff"}>
         {defaultRender({
           ...props,
           className: detailsListStyles.detailsListHeader,
           styles: {
             root: {
               backgroundColor: "transparent",
-              color: this.props.themeVariant.semanticColors.bodyText,
-              borderBottom: `1px solid ${this.props.themeVariant.semanticColors.bodyDivider}`,
+              color: this.props.themeVariant?.semanticColors?.bodyText ?? "#323130",
+              borderBottom: `1px solid ${this.props.themeVariant?.semanticColors?.bodyDivider ?? "#edebe9"}`,
               selectors: {
                 i: {
-                  color: this.props.themeVariant.semanticColors.bodyText,
+                  color: this.props.themeVariant?.semanticColors?.bodyText ?? "#323130",
                   fontWeight: "600",
                 },
                 [`.${detailsListStyles.detailsListHeader} .ms-DetailsHeader-cellTitle`]: {
-                  color: this.props.themeVariant.semanticColors.bodyText,
+                  color: this.props.themeVariant?.semanticColors?.bodyText ?? "#323130",
                   fontWeight: "600",
                 }
               }
@@ -992,6 +1056,7 @@ export class DetailsListComponent extends React.Component<
       }
     );
   };
+
 
   private _buildGroups(
     items: any[],
@@ -1044,6 +1109,33 @@ export class DetailsListComponent extends React.Component<
     }
 
     return groups;
+  }
+
+  private _resolveColumnValue(item: any, columnValue: string): any {
+    if (!columnValue) {
+      return undefined;
+    }
+
+    const exactValue = ObjectHelper.byPath(item, columnValue);
+    if (this._hasRenderableValue(exactValue)) {
+      return exactValue;
+    }
+
+    const externalItemValue = this._resolveExternalItemFieldValue(item, columnValue);
+    if (this._hasRenderableValue(externalItemValue)) {
+      return externalItemValue;
+    }
+  }
+
+  private _resolveExternalItemFieldValue(item: any, fieldName: string): any {
+    return ObjectHelper.byPath(item, `resource.fields.${fieldName}`)
+      ?? ObjectHelper.byPath(item, `resource.properties.${fieldName}`)
+      ?? ObjectHelper.byPath(item, `resource.${fieldName}`)
+      ?? ObjectHelper.byPath(item, fieldName);
+  }
+
+  private _hasRenderableValue(value: any): boolean {
+    return value !== undefined && value !== null && value !== '';
   }
 
   private _processHandleBarsExprValue(columnValue: string, item: any): string {

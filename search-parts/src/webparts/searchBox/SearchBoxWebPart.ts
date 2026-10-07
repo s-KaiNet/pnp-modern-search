@@ -21,9 +21,7 @@ import {
     IPropertyPanePage,
     IPropertyPaneGroup
 } from "@microsoft/sp-property-pane";
-import { PropertyFieldColorPicker, PropertyFieldColorPickerStyle } from '@pnp/spfx-property-controls/lib/PropertyFieldColorPicker';
-import SearchBoxContainer from './components/SearchBoxContainer';
-import { ISearchBoxContainerProps } from './components/ISearchBoxContainerProps';
+const SearchBoxContainer = React.lazy(() => import(/* webpackChunkName: 'pnp-modern-search-box-container' */ './components/SearchBoxContainer'));
 import { DynamicDataService } from '../../services/dynamicDataService/DynamicDataService';
 import { IDynamicDataCallables, IDynamicDataPropertyDefinition } from '@microsoft/sp-dynamic-data';
 import IDynamicDataService from '../../services/dynamicDataService/IDynamicDataService';
@@ -44,6 +42,7 @@ import { ITokenService } from '@pnp/modern-search-extensibility';
 import { BuiltinTokenNames, TokenService } from '../../services/tokenService/TokenService';
 import { BaseWebPart } from '../../common/BaseWebPart';
 import { DynamicPropertyHelper } from '../../helpers/DynamicPropertyHelper';
+import { ExtensibilityUsageHelper } from '../../helpers/ExtensibilityUsageHelper';
 import PnPTelemetry from '@pnp/telemetry-js';
 import commonStyles from '../../styles/Common.module.scss';
 
@@ -95,6 +94,8 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
      */
     private tokenService: ITokenService;
 
+    private readonly _boundRender = this.render.bind(this);
+
     constructor() {
         super();
 
@@ -130,7 +131,20 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
         return super.onInit();
     }
 
+    /**
+     * Tracks whether the Web Part has been disposed. Async callbacks may resolve after the instance
+     * is torn down; rendering then crashes because 'this.context' is no longer available. This flag
+     * lets render() bail out safely.
+     */
+    private _webPartDisposed: boolean = false;
+
     public async render(): Promise<void> {
+
+        // The Web Part may have been disposed while an async callback was in flight. Rendering a
+        // disposed instance crashes because 'this.context' is no longer available, so bail out early.
+        if (this._webPartDisposed) {
+            return;
+        }
 
         // Check audience targeting - if user is not in audience, don't render
         const isInAudience = await this.isInAudience();
@@ -155,6 +169,12 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
             this.errorMessage = error.message ? error.message : error;
         }
 
+        // Re-check disposal here: the await above yields control and the instance can be disposed in
+        // the meantime, leaving 'this.context' undefined when this code resumes.
+        if (this._webPartDisposed || !this.context) {
+            return;
+        }
+
         if (this.context.propertyPane && this.context.propertyPane.isPropertyPaneOpen()) {
             this.context.propertyPane.refresh();
         }
@@ -171,6 +191,7 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
         }
 
         if (!this.domElement) {
+            super.renderCompleted();
             return;
         }
         let renderRootElement: JSX.Element = null;
@@ -204,7 +225,7 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
             }
         }
 
-        renderRootElement = React.createElement(SearchBoxContainer, {
+        const searchBoxElement = React.createElement(SearchBoxContainer, {
             domElement: this.domElement,
             enableQuerySuggestions: this.properties.enableQuerySuggestions,
             inputValue: this._searchQueryText,
@@ -242,7 +263,9 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
                 themeVariant: this._themeVariant,
                 className: commonStyles.wpTitle
             }
-        } as ISearchBoxContainerProps);
+        });
+
+        renderRootElement = React.createElement(React.Suspense, { fallback: null }, searchBoxElement);
 
         // Error message
         if (this.errorMessage) {
@@ -262,6 +285,8 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
     }
 
     protected onDispose(): void {
+        this._webPartDisposed = true;
+        window.removeEventListener('hashchange', this._boundRender);
         if (this._pushStateCallback) {
             window.history.pushState = this._pushStateCallback;
         }
@@ -360,6 +385,8 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
 
     protected async loadPropertyPaneResources(): Promise<void> {
 
+        await this.loadCommonPropertyPaneResources();
+
         const { PropertyFieldCollectionData, CustomCollectionFieldType } = await import(
             /* webpackChunkName: 'pnp-modern-search-property-pane' */
             '@pnp/spfx-property-controls/lib/PropertyFieldCollectionData'
@@ -404,7 +431,7 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
             // Reset existing definitions to default
             this.availableCustomProviders = AvailableSuggestionProviders.BuiltinSuggestionProviders;
 
-            await this.loadExtensions(cleanConfiguration);
+            await this.loadExtensions(cleanConfiguration, true);
         }
 
         this._bindHashChange();
@@ -638,7 +665,7 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
             }),
 
             // Colors
-            PropertyFieldColorPicker('searchBoxBorderColor', {
+            this._basePropertyFieldColorPicker('searchBoxBorderColor', {
                 label: webPartStrings.PropertyPane.SearchBoxStylingGroup.BorderColorLabel,
                 selectedColor: this.properties.searchBoxBorderColor,
                 onPropertyChange: this.onPropertyPaneFieldChanged,
@@ -647,10 +674,10 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
                 debounce: 500,
                 isHidden: false,
                 alphaSliderHidden: false,
-                style: PropertyFieldColorPickerStyle.Inline,
+                style: this._basePropertyFieldColorPickerStyle.Inline,
                 key: 'searchBoxBorderColorFieldId'
             }),
-            PropertyFieldColorPicker('searchBoxTextColor', {
+            this._basePropertyFieldColorPicker('searchBoxTextColor', {
                 label: webPartStrings.PropertyPane.SearchBoxStylingGroup.TextColorLabel,
                 selectedColor: this.properties.searchBoxTextColor,
                 onPropertyChange: this.onPropertyPaneFieldChanged,
@@ -659,10 +686,10 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
                 debounce: 500,
                 isHidden: false,
                 alphaSliderHidden: false,
-                style: PropertyFieldColorPickerStyle.Inline,
+                style: this._basePropertyFieldColorPickerStyle.Inline,
                 key: 'searchBoxTextColorFieldId'
             }),
-            PropertyFieldColorPicker('placeholderTextColor', {
+            this._basePropertyFieldColorPicker('placeholderTextColor', {
                 label: webPartStrings.PropertyPane.SearchBoxStylingGroup.PlaceholderTextColorLabel,
                 selectedColor: this.properties.placeholderTextColor,
                 onPropertyChange: this.onPropertyPaneFieldChanged,
@@ -671,10 +698,10 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
                 debounce: 500,
                 isHidden: false,
                 alphaSliderHidden: false,
-                style: PropertyFieldColorPickerStyle.Inline,
+                style: this._basePropertyFieldColorPickerStyle.Inline,
                 key: 'placeholderTextColorFieldId'
             }),
-            PropertyFieldColorPicker('searchButtonColor', {
+            this._basePropertyFieldColorPicker('searchButtonColor', {
                 label: webPartStrings.PropertyPane.SearchBoxStylingGroup.ButtonColorLabel,
                 selectedColor: this.properties.searchButtonColor,
                 onPropertyChange: this.onPropertyPaneFieldChanged,
@@ -683,7 +710,7 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
                 debounce: 500,
                 isHidden: false,
                 alphaSliderHidden: false,
-                style: PropertyFieldColorPickerStyle.Inline,
+                style: this._basePropertyFieldColorPickerStyle.Inline,
                 key: 'searchButtonColorFieldId'
             }),
 
@@ -830,9 +857,11 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
 
         this.properties.providerProperties = this.properties.providerProperties ? this.properties.providerProperties : {};
 
+        // Seed an example row (disabled by default) so the property pane shows users
+        // where to add their extension manifest IDs. Disabled — it doesn't try to load.
         this.properties.extensibilityLibraryConfiguration = this.properties.extensibilityLibraryConfiguration ? this.properties.extensibilityLibraryConfiguration : [{
             name: commonStrings.General.Extensibility.DefaultExtensibilityLibraryName,
-            enabled: true,
+            enabled: false,
             id: Constants.DEFAULT_EXTENSIBILITY_LIBRARY_COMPONENT_ID
         }];
 
@@ -856,6 +885,11 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
 
         // Set the input query text globally for the page. There can be only one input query text submitted at a time even if multiple search box components are on the page
         GlobalSettings.setValue(BuiltinTokenNames.inputQueryText, searchQuery);
+
+        // Bump a page-wide submission id on every submit so connected Search Results always re-query,
+        // even when the query text is unchanged (issue #4790).
+        const submissionId = (GlobalSettings.getValue<number>(Constants.SEARCH_BOX_SUBMISSION_ID_KEY, 0) || 0) + 1;
+        GlobalSettings.setValue(Constants.SEARCH_BOX_SUBMISSION_ID_KEY, submissionId);
 
         this.context.dynamicDataSourceManager.notifyPropertyChanged(ComponentType.SearchBox);
         this.context.dynamicDataSourceManager.notifySourceChanged();
@@ -893,9 +927,9 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
         const queryTextSource = DynamicPropertyHelper.tryGetSourceSafe(this.properties.queryText);
         if (queryTextSource && this.properties.queryText?.reference?.localeCompare('PageContext:UrlData:fragment') === 0) {
             // Manually subscribe to hash change since the default property doesn't
-            window.addEventListener('hashchange', this.render);
+            window.addEventListener('hashchange', this._boundRender);
         } else {
-            window.removeEventListener('hashchange', this.render);
+            window.removeEventListener('hashchange', this._boundRender);
         }
     }
 
@@ -1001,14 +1035,38 @@ export default class SearchBoxWebPart extends BaseWebPart<ISearchBoxWebPartProps
     }
 
     /**
-     * Loads extensions from registered extensibility librairies
+     * Loads extensions from registered extensibility libraries
      */
-    private async loadExtensions(librariesConfiguration: IExtensibilityConfiguration[]) {
+    private async loadExtensions(librariesConfiguration: IExtensibilityConfiguration[], forceLoad: boolean = false) {
 
         const customSuggestionProviderConfiguration: ISuggestionProviderConfiguration[] = [];
 
+        // Only attempt to load extensibility libraries when the Search Box actually uses something
+        // provided by one (a custom suggestions provider). This early-exit avoids the slow
+        // retry/backoff load of a registered-but-undeployed library. The property-pane
+        // configuration path passes forceLoad=true so enabling a library makes its providers
+        // selectable even before one has been enabled.
+        let librariesToLoad = librariesConfiguration;
+        const enabledCount = librariesConfiguration.filter(c => c.enabled).length;
+        if (!forceLoad && enabledCount > 0) {
+            const usage = ExtensibilityUsageHelper.getSearchBoxUsage({
+                suggestionProviderConfiguration: this.properties.suggestionProviderConfiguration,
+                builtinSuggestionProviderKeys: AvailableSuggestionProviders.BuiltinSuggestionProviders.map(p => p.key)
+            });
+            if (!usage.usesCustomExtensibility) {
+                librariesToLoad = [];
+                const message = `Skipping load of ${enabledCount} enabled extensibility library/libraries — not used by this Web Part (${usage.reason}).`;
+                Log.verbose(LogSource, message, this.context.serviceScope);
+                ExtensibilityUsageHelper.debugLog(`[${LogSource}] ${message}`);
+            } else {
+                const message = `Loading ${enabledCount} enabled extensibility library/libraries — the Web Part uses ${usage.reason}.`;
+                Log.verbose(LogSource, message, this.context.serviceScope);
+                ExtensibilityUsageHelper.debugLog(`[${LogSource}] ${message}`);
+            }
+        }
+
         // Load extensibility library if present
-        const extensibilityLibraries = await this.extensibilityService.loadExtensibilityLibraries(librariesConfiguration);
+        const extensibilityLibraries = await this.extensibilityService.loadExtensibilityLibraries(librariesToLoad);
 
         // Load extensibility additions
         if (extensibilityLibraries.length > 0) {

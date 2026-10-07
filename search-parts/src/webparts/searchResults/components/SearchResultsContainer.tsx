@@ -22,6 +22,7 @@ import { Spinner, SpinnerSize } from '@fluentui/react/lib/Spinner';
 import { Shimmer, ShimmerElementsGroup, ShimmerElementType } from '@fluentui/react/lib/Shimmer';
 
 const LogSource = "SearchResultsContainer";
+const RESET_RESULTS_SELECTION_EVENT = "resetResultsSelection";
 
 /**
  * Cached data structure for a data source
@@ -57,6 +58,7 @@ export default class SearchResultsContainer extends React.Component<ISearchResul
     private _lastPageSelectedKeys: string[] = [];
 
     private _searchWebPartRef: HTMLElement;
+    private _resultsContainerRef: HTMLDivElement;
 
     public constructor(props: ISearchResultsContainerProps) {
 
@@ -73,6 +75,7 @@ export default class SearchResultsContainer extends React.Component<ISearchResul
         this.templateService = this.props.serviceScope.consume<ITemplateService>(TemplateService.ServiceKey);
 
         this._onSelectionChanged = this._onSelectionChanged.bind(this);
+        this._onResetResultsSelection = this._onResetResultsSelection.bind(this);
 
         this._selection = new Selection({
             onSelectionChanged: this._onSelectionChanged,
@@ -91,14 +94,18 @@ export default class SearchResultsContainer extends React.Component<ISearchResul
         let templateContent: string = null;
         let renderInfoMessage: JSX.Element = null;
 
-        let renderTitle: JSX.Element = <StyledWebPartTitle
+        const hasTitleText = !!this.props.webPartTitleProps.title?.trim();
+        const shouldRenderTitle = this.props.properties.showTitle && (this.props.webPartTitleProps.displayMode === DisplayMode.Edit || hasTitleText);
+
+        let renderTitle: JSX.Element = shouldRenderTitle ? <StyledWebPartTitle
             instanceId={this.props.instanceId}
             titleFont={this.props.titleFont}
             titleFontSize={this.props.titleFontSize}
             titleFontColor={this.props.titleFontColor}
             webPartTitleProps={this.props.webPartTitleProps}
+            titleAction={this.props.titleAction}
             testId={TestConstants.SearchResultsWebPartTitle}
-        />;
+        /> : null;
 
         // Content loading
         templateContent = this.templateService.getTemplateMarkup(this.props.templateContent);
@@ -199,6 +206,7 @@ export default class SearchResultsContainer extends React.Component<ISearchResul
 
         return <main><div data-instance-id={this.props.instanceId}
             data-ui-test-id={TestConstants.SearchResultsWebPart}
+            ref={(ref) => { this._resultsContainerRef = ref; }}
             style={containerStyles}>
             <div tabIndex={-1} ref={(ref) => { this._searchWebPartRef = ref; }}></div>
             {renderOverlay}
@@ -210,13 +218,19 @@ export default class SearchResultsContainer extends React.Component<ISearchResul
     }
 
     public async componentDidMount() {
+        this._resultsContainerRef?.addEventListener(RESET_RESULTS_SELECTION_EVENT, this._onResetResultsSelection as EventListener);
         await this.getDataFromDataSource(this.props.dataContext.pageNumber);
+    }
+
+    public componentWillUnmount(): void {
+        this._resultsContainerRef?.removeEventListener(RESET_RESULTS_SELECTION_EVENT, this._onResetResultsSelection as EventListener);
     }
 
     public async componentDidUpdate(prevProps: ISearchResultsContainerProps, prevState: ISearchResultsContainerState) {
 
         if (!isEqual(prevProps.dataSourceKey, this.props.dataSourceKey)
             || !isEqual(prevProps.dataContext, this.props.dataContext)
+            || prevProps.lastSubmittedQueryId !== this.props.lastSubmittedQueryId
             || !isEqual(prevProps.properties.dataSourceProperties, this.props.properties.dataSourceProperties)
             || !isEqual(prevProps.properties.templateSlots, this.props.properties.templateSlots)) {
 
@@ -249,6 +263,7 @@ export default class SearchResultsContainer extends React.Component<ISearchResul
      */
     private async getDataFromDataSource(pageNumber: number): Promise<void> {
 
+        this.props.onDataLoadingChanged(true);
         this.setState({
             isLoading: true,
             errorMessage: ''
@@ -283,17 +298,19 @@ export default class SearchResultsContainer extends React.Component<ISearchResul
                     // Send back the previous filters with reset values to the Data Filter WP to keep selected values in the UI and be able to reset them if necessary
                     // (Ex: Multi values filters, date range)
                     availableFilters = this._lastAvailableSearchFilters.map(lastAvailableFilter => {
-                        lastAvailableFilter.values = [];
-                        return lastAvailableFilter;
+                        const clonedAvailableFilter = cloneDeep(lastAvailableFilter);
+                        clonedAvailableFilter.values = [];
+                        return clonedAvailableFilter;
                     });
 
                 } else {
-                    availableFilters = data.filters;
-                    this._lastAvailableSearchFilters = availableFilters;
+                    availableFilters = cloneDeep(data.filters);
+                    this._lastAvailableSearchFilters = cloneDeep(availableFilters);
                 }
             }
 
             this.props.onDataRetrieved(this.getAvailableFieldsFromResults(data), availableFilters, pageNumber);
+            this.props.onDataLoadingChanged(false);
 
             // Persist the total items count
             this._totalItemsCount = totalItemsCount;
@@ -309,6 +326,8 @@ export default class SearchResultsContainer extends React.Component<ISearchResul
             this._lastPageNumber = pageNumber;
 
         } catch (error) {
+
+            this.props.onDataLoadingChanged(false);
 
             this.setState({
                 isLoading: false,
@@ -508,5 +527,14 @@ export default class SearchResultsContainer extends React.Component<ISearchResul
             });
         }
 
+    }
+
+    private _onResetResultsSelection(): void {
+        this._lastPageSelectedKeys = [];
+        this._selection.setAllSelected(false);
+        this.props.onItemSelected([]);
+        this.setState({
+            selectedItemKeys: []
+        });
     }
 }

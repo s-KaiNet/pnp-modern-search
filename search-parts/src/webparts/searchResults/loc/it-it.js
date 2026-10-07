@@ -9,7 +9,9 @@ define([], function () {
             },
             WebPartDefaultTitle: "Web Part dei Risultati di Ricerca",
             ShowBlankEditInfoMessage: "Nessun risultato restituito per questa query. Questa Web Part rimarrà vuota in modalità di visualizzazione secondo i parametri.",
-            CurrentVerticalNotSelectedMessage: "Il verticale selezionato attualmente non corrisponde a quello associato a questa Web Part. Rimarrà vuoto in modalità di visualizzazione."
+            CurrentVerticalNotSelectedMessage: "Il verticale selezionato attualmente non corrisponde a quello associato a questa Web Part. Rimarrà vuoto in modalità di visualizzazione.",
+            RollupSuggestionMessage: "Questa Web Part Risultati di ricerca non è collegata a nessun'altra Web Part nella pagina. Considera l'utilizzo della versione 'PnP - Search Rollup' — può essere caricata in modalità lazy da SharePoint e non eseguirà query sulla sorgente dati finché non verrà visualizzata, migliorando le prestazioni di caricamento della pagina.",
+            RollupSuggestionLinkText: "Ulteriori informazioni"
         },
         PropertyPane: {
             DataSourcePage: {
@@ -22,6 +24,7 @@ define([], function () {
                 HideNavigationFieldName: "Nascondi pulsanti di navigazione (pagina precedente, pagina successiva)",
                 HideFirstLastPagesFieldName: "Nascondi pulsanti di navigazione prima/ultima pagina",
                 HideDisabledFieldName: "Nascondi pulsanti di navigazione (precedente, successiva, prima, ultima) se disabilitati.",
+                EnableQueryStringFieldName: "Attiva il numero di pagina nell'URL",
                 TemplateSlots: {
                     GroupName: "Slot di layout",
                     ConfigureSlotsLabel: "Modifica slot di layout per questa fonte di dati",
@@ -38,6 +41,10 @@ define([], function () {
                 LayoutSelectionGroupName: "Layout disponibili",
                 LayoutTemplateOptionsGroupName: "Opzioni del layout",
                 CommonOptionsGroupName: "Comune",
+                ShowTitle: "Mostra titolo",
+                TitleLinkTextFieldLabel: "Testo del link \"Vedi tutto\"",
+                TitleLinkUrlFieldLabel: "URL del link \"Vedi tutto\"",
+                TitleLinkOpenInNewTab: "Apri in una nuova scheda",
                 TemplateUrlFieldLabel: "Usa un URL di modello esterno",
                 TemplateUrlPlaceholder: "https://myfile.html",
                 ErrorTemplateExtension: "Il modello deve essere un file .txt, .htm o .html valido",
@@ -115,7 +122,8 @@ define([], function () {
                 SearchQueryTextDefaultValue: "Valore predefinito",
                 SourceDestinationFieldLabel: "Nome campo di destinazione",
                 SourceDestinationFieldDescription: "Campo di destinazione da usare in questa Web Part per corrispondere ai valori selezionati",
-                AvailableFieldValuesFromResults: "Campo contenente il valore del filtro"
+                AvailableFieldValuesFromResults: "Campo contenente il valore del filtro",
+                BidirectionalConnectionWarning: "La Web Part dei filtri connessa non è stata configurata per ricollegarsi a questa Web Part dei risultati di ricerca. Entrambe le Web Part devono essere collegate tra loro affinché i filtri funzionino correttamente."
             },
             InformationPage: {
                 Extensibility: {

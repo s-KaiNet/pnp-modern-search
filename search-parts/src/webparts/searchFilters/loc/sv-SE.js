@@ -1,4 +1,4 @@
-define([], function() {
+define([], function () {
     return {
         General: {
             PlaceHolder: {
@@ -8,7 +8,13 @@ define([], function() {
                 ConfigureBtnLabel: "Konfigurera"
             },
             NoAvailableFilterMessage: "Inget tillgängligt filter att visa.",
-            WebPartDefaultTitle: "Sökfilters webbdel"
+            WebPartDefaultTitle: "Sökfilters webbdel",
+            StaticPeoplePicker: {
+                RemoveSelectedUserTitle: "Ta bort {0}",
+                SearchUsersPlaceholder: "Sök användare",
+                LoadingTenantUsersLabel: "Läser in klientanvändare...",
+                NoUsersFoundMessage: "Inga användare hittades."
+            }
         },
         PropertyPane: {
             ConnectionsPage: {
@@ -16,7 +22,8 @@ define([], function() {
                 UseDataResultsFromComponentsLabel: "Använd data från dessa webbdelar",
                 UseDataResultsFromComponentsDescription: "Om du ansluter mer än en webbdel slås filtervärden samman till liknande filternamn.",
                 LinkToVerticalLabel: "Visa filter endast när följande vertikaler är valda",
-                LinkToVerticalLabelHoverMessage: "Filtren kommer endast att visas om den valda vertikalen matchar de som konfigurerats för den här webbdelen. Annars kommer webbdelen att vara tom (ingen marginal och ingen utfyllnad) i visningsläge."
+                LinkToVerticalLabelHoverMessage: "Filtren kommer endast att visas om den valda vertikalen matchar de som konfigurerats för den här webbdelen. Annars kommer webbdelen att vara tom (ingen marginal och ingen utfyllnad) i visningsläge.",
+                BidirectionalConnectionWarning: "En eller flera anslutna sökresultatwebbdelar har inte konfigurerats för att ansluta tillbaka till denna filterwebbdel. Båda webbdelarna måste vara anslutna till varandra för att filtren ska fungera korrekt."
             },
             FiltersSettingsPage: {
                 SettingsGroupName: "Filterinställningar",
@@ -27,9 +34,15 @@ define([], function() {
                 FilterNameLabel: "Fält för filter",
                 FilterMaxBuckets: "# av värden",
                 FilterMaxBucketsWarning: "Det maximala antalet värden är 1000",
+                FilterLimitReachedWarningToggle: "Visa varning när gränsen uppnås",
+                FilterLimitReachedWarningMessage: "Resultatgränsen har nåtts — alla matchande objekt visas inte. Förfina sökningen för att begränsa listan.",
+                EditModeRefinerLimitReachedWarningMessage: "I redigeringsläge är filtren begränsade till högst 100 objekt.",
+                PeopleTemplateQUserMappingWarning: "Varning för personmall: värdena ser inte ut som användaridentiteter. Den här egenskapen är troligen inte mappad till en Q_USER-genomsökt egenskap.",
                 FilterDisplayName: "Visningsnamn",
                 FilterTemplate: "Filtermall",
                 FilterExpandByDefault: "Expandera som standard",
+                ExpandAllNodesByDefault: "Expandera alla noder som standard",
+                HideNodesNotInDataSet: "Dölj noder som inte finns i den aktuella datamängden",
                 FilterType: "Filtertyp",
                 FilterTypeRefiner: "Denna filtermall fungerar som en raffinör och tar emot/skickar tillgängliga/valda värden från/till den anslutna datakällan.",
                 FilterTypeStaticFilter: "Denna filtermall fungerar som ett statiskt filter och skickar endast slumpmässigt valda värden till den anslutna datakällan. Inkommande filtervärden beaktas inte.",
@@ -48,7 +61,9 @@ define([], function() {
                     ComboBoxTemplate: "Kombinationsruta",
                     DateIntervalTemplate: "Datumintervall (fasta intervall)",
                     PeopleTemplate: "Person mall",
-                    TaxonomyPickerTemplate: "Taxonomiväljare"
+                    StaticPeopleTemplate: "Statisk personmall",
+                    TaxonomyPickerTemplate: "Taxonomiväljare",
+                    HierarchicalFilterTemplate: "Hierarkiskt filter"
                 },
                 SortBy: "Sorteringsordning",
                 SortDirection: "Sorteringsriktning",
@@ -66,6 +81,12 @@ define([], function() {
                 ErrorTemplateResolve: "Det går inte att visa den angivna mallen. Felinformation: '{0}'",
                 FiltersTemplateFieldLabel: "Redigera filtermall",
                 FiltersTemplatePanelHeader: "Redigera filtermall"
+            },
+            InformationPage: {
+                Extensibility: {
+                    PanelHeader: "Konfigurera utbyggnadsbibliotek som ska laddas vid start.",
+                    PanelDescription: "Lägg till/ta bort anpassade utbyggnadsbiblioteket-ID:n här. Du kan ange ett visningsnamn och bestämma om biblioteket ska laddas eller ej vid start. Här laddas bara anpassade filterlayouter, filterkontroller, webbkomponenter och styrhjälpmedel."
+                }
             }
         },
         Styling: {

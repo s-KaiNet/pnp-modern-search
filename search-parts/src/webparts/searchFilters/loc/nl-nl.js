@@ -1,4 +1,4 @@
-define([], function() {
+define([], function () {
     return {
         General: {
             PlaceHolder: {
@@ -8,7 +8,13 @@ define([], function() {
                 ConfigureBtnLabel: "Configureer"
             },
             NoAvailableFilterMessage: "Er zijn geen beschikbare filters.",
-            WebPartDefaultTitle: "Zoekfilters webonderdeel"
+            WebPartDefaultTitle: "Zoekfilters webonderdeel",
+            StaticPeoplePicker: {
+                RemoveSelectedUserTitle: "{0} verwijderen",
+                SearchUsersPlaceholder: "Zoek gebruikers",
+                LoadingTenantUsersLabel: "Tenantgebruikers laden...",
+                NoUsersFoundMessage: "Geen gebruikers gevonden."
+            }
         },
         PropertyPane: {
             ConnectionsPage: {
@@ -16,9 +22,10 @@ define([], function() {
                 UseDataResultsFromComponentsLabel: "Gebruik data van deze webonderdelen",
                 UseDataResultsFromComponentsDescription: "Wanneer je verbindt met meer dan één webonderdeel worden aantallen en waarden voor gelijknamige filters samengevoegd.",
                 LinkToVerticalLabel: "Filters alleen weergeven als de volgende verticalen zijn geselecteerd",
-                LinkToVerticalLabelHoverMessage: "De filters worden alleen weergegeven als de geselecteerde verticale lijn overeenkomt met de filters die voor dit webonderdeel zijn geconfigureerd. Anders is het webonderdeel leeg (geen marge en geen opvulling) in de weergavemodus."
+                LinkToVerticalLabelHoverMessage: "De filters worden alleen weergegeven als de geselecteerde verticale lijn overeenkomt met de filters die voor dit webonderdeel zijn geconfigureerd. Anders is het webonderdeel leeg (geen marge en geen opvulling) in de weergavemodus.",
+                BidirectionalConnectionWarning: "Een of meer verbonden zoekresultaten webonderdelen zijn niet geconfigureerd om terug te verbinden met dit filters webonderdeel. Beide webonderdelen moeten met elkaar verbonden zijn om filters correct te laten werken."
             },
-            FiltersSettingsPage: { 
+            FiltersSettingsPage: {
                 SettingsGroupName: "Filter instellingen",
                 FilterOperator: "Bewerking om tussen filters te gebruiken"
             },
@@ -27,9 +34,15 @@ define([], function() {
                 FilterNameLabel: "Filterveld",
                 FilterMaxBuckets: "# waarden",
                 FilterMaxBucketsWarning: "Het maximale aantal waarden is 1000",
+                FilterLimitReachedWarningToggle: "Waarschuwing tonen wanneer de limiet is bereikt",
+                FilterLimitReachedWarningMessage: "Resultaatlimiet bereikt — niet alle overeenkomende items worden weergegeven. Verfijn uw zoekopdracht om de lijst te beperken.",
+                EditModeRefinerLimitReachedWarningMessage: "In de bewerkingsmodus zijn verfijningen beperkt tot maximaal 100 items.",
+                PeopleTemplateQUserMappingWarning: "Waarschuwing voor personen-sjabloon: waarden lijken geen gebruikersidentiteiten te zijn. Deze eigenschap is waarschijnlijk niet toegewezen aan een Q_USER-crawled property.",
                 FilterDisplayName: "Weergavenaam",
                 FilterTemplate: "Sjabloon",
                 FilterExpandByDefault: "Standaard uitklappen",
+                ExpandAllNodesByDefault: "Alle knooppunten standaard uitklappen",
+                HideNodesNotInDataSet: "Knooppunten verbergen die niet in de huidige gegevensset voorkomen",
                 FilterType: "Soort filter",
                 FilterTypeRefiner: "Dit filtersjabloon gedraagt zich als verfijning en ontvangt/zendt beschikbare/geselecteerde waarden van/naar de verbonden databron.",
                 FilterTypeStaticFilter: "Dit filtersjabloon gedraagt zich als een statisch filter en stuurt enkel geselecteerde waarden welke vooraf gedefinieerd zijn naar de verbonden databron.  Filterwaarden afkomstig uit de verbonden databron worden buiten beschouwing gelaten.",
@@ -48,7 +61,9 @@ define([], function() {
                     ComboBoxTemplate: "Keuzelijst",
                     DateIntervalTemplate: "Datum interval",
                     PeopleTemplate: "Persoon sjabloon",
-                    TaxonomyPickerTemplate: "Taxonomie picker"
+                    StaticPeopleTemplate: "Statisch persoonssjabloon",
+                    TaxonomyPickerTemplate: "Taxonomie picker",
+                    HierarchicalFilterTemplate: "Hiërarchisch filter"
                 },
                 SortBy: "Sorteer waarden op",
                 SortDirection: "Sorteervolgorde",
@@ -66,6 +81,12 @@ define([], function() {
                 ErrorTemplateResolve: "Kan het opgegeven template niet inladen. Foutmelding: '{0}'",
                 FiltersTemplateFieldLabel: "Bewerk filters sjabloon",
                 FiltersTemplatePanelHeader: "Bewerk filters sjabloon"
+            },
+            InformationPage: {
+                Extensibility: {
+                    PanelHeader: "Configureer inladen van uitbreidingsbibliotheken bij opstarten",
+                    PanelDescription: "Beheer hier je aangepaste uitbreidingsbibliotheek ID's. Je kan hier een weergavenaam specificeren en aangeven of de bibliotheek geladen moet worden. Alleen aangepaste filterindelingen, filtercontrols, web componenten en Handlebars helpers worden hier geladen."
+                }
             }
         },
         Styling: {

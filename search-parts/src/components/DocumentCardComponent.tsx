@@ -120,6 +120,42 @@ export class DocumentCardComponent extends React.Component<
         );
     }
 
+    const asString = (value: unknown): string | undefined => {
+      if (value === null || value === undefined) {
+        return undefined;
+      }
+
+      if (value instanceof Date) {
+        return value.toString();
+      }
+
+      if (
+        typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean" ||
+        typeof value === "bigint"
+      ) {
+        return String(value);
+      }
+
+      return undefined;
+    };
+
+    processedProps = {
+      ...processedProps,
+      title: asString(processedProps.title),
+      location: asString(processedProps.location),
+      tags: asString(processedProps.tags),
+      href: asString(processedProps.href),
+      previewImage: asString(processedProps.previewImage),
+      date: asString(processedProps.date),
+      profileImage: asString(processedProps.profileImage),
+      previewUrl: asString(processedProps.previewUrl),
+      author: asString(processedProps.author),
+      fileExtension: asString(processedProps.fileExtension),
+      isContainer: asString(processedProps.isContainer),
+    };
+
     if (processedProps.fileExtension) {
       fileExtension = processedProps.fileExtension
         .split("?")[0]
@@ -178,7 +214,7 @@ export class DocumentCardComponent extends React.Component<
     };
 
     let previewProps: IDocumentCardPreviewProps = {
-      theme: this.props.themeVariant as ITheme,
+      theme: (this.props.themeVariant as ITheme) || getTheme(),
       previewImages: [
         {
           name: processedProps.title,
@@ -205,6 +241,10 @@ export class DocumentCardComponent extends React.Component<
       const parts = processedProps.author.split("|");
       author = parts.length === 1 ? parts[0] : parts[1];
     }
+
+    const activityText = processedProps.date
+      ? String(processedProps.date)
+      : undefined;
 
     let previewFunc = this.props.enablePreview ? this.showPreviewOnClick : null;
 
@@ -235,8 +275,8 @@ export class DocumentCardComponent extends React.Component<
         documentCardStyles.root = {
           borderWidth: "2px",
           borderColor:
-            this.props.themeVariant.semanticColors
-              .primaryButtonBackgroundHovered,
+            this.props.themeVariant?.semanticColors
+              ?.primaryButtonBackgroundHovered ?? "#0f6cbd",
         };
       }
     }
@@ -248,7 +288,7 @@ export class DocumentCardComponent extends React.Component<
         data-selection-toggle
       >
         <DocumentCard
-          theme={this.props.themeVariant as ITheme}
+          theme={(this.props.themeVariant as ITheme) || getTheme()}
           onClick={previewFunc}
           styles={documentCardStyles}
           type={
@@ -291,7 +331,7 @@ export class DocumentCardComponent extends React.Component<
               ></div>
             ) : null}
             <Link
-              theme={this.props.themeVariant as ITheme}
+              theme={(this.props.themeVariant as ITheme) || getTheme()}
               href={processedProps.href}
               target="_blank"
               styles={{
@@ -305,7 +345,7 @@ export class DocumentCardComponent extends React.Component<
               }}
             >
               <DocumentCardTitle
-                theme={this.props.themeVariant as ITheme}
+                theme={(this.props.themeVariant as ITheme) || getTheme()}
                 title={processedProps.title}
                 //  shouldTruncate={true}
               />
@@ -325,8 +365,8 @@ export class DocumentCardComponent extends React.Component<
             ) : null}
             {processedProps.author ? (
               <DocumentCardActivity
-                theme={this.props.themeVariant as ITheme}
-                activity={processedProps.date}
+                theme={(this.props.themeVariant as ITheme) || getTheme()}
+                activity={activityText}
                 people={[
                   {
                     name: author,

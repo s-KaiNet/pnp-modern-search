@@ -9,7 +9,9 @@ define([], function () {
             },
             WebPartDefaultTitle: "Search Results Web Part",
             ShowBlankEditInfoMessage: "No result returned for this query. This Web Part will remain blank in display mode according to parameters.",
-            CurrentVerticalNotSelectedMessage: "The current selected vertical does not match with the one associated for this Web Part. It will remains blank in display mode."
+            CurrentVerticalNotSelectedMessage: "The current selected vertical does not match with the one associated for this Web Part. It will remains blank in display mode.",
+            RollupSuggestionMessage: "This Search Results Web Part is not connected to any other Web Part on the page. Consider using the 'PnP - Search Rollup' version instead — it can be lazy loaded by SharePoint and will not fire data source queries until scrolled into view, improving page load performance.",
+            RollupSuggestionLinkText: "Learn more"
         },
         PropertyPane: {
             DataSourcePage: {
@@ -22,6 +24,7 @@ define([], function () {
                 HideNavigationFieldName: "Hide navigation buttons (prev page, next page)",
                 HideFirstLastPagesFieldName: "Hide first/last navigation buttons",
                 HideDisabledFieldName: "Hide navigation buttons (prev, next, first, last) if they are disabled.",
+                EnableQueryStringFieldName: "Enable page number in query string",
                 TemplateSlots: {
                     GroupName: "Layout slots",
                     ConfigureSlotsLabel: "Edit layout slots for this data source",
@@ -38,6 +41,10 @@ define([], function () {
                 LayoutSelectionGroupName: "Available layouts",
                 LayoutTemplateOptionsGroupName: "Layout options",
                 CommonOptionsGroupName: "Common",
+                ShowTitle: "Show title",
+                TitleLinkTextFieldLabel: "See all text",
+                TitleLinkUrlFieldLabel: "See all URL",
+                TitleLinkOpenInNewTab: "Open in new tab",
                 TemplateUrlFieldLabel: "Use an external template URL",
                 TemplateUrlPlaceholder: "https://myfile.html",
                 ErrorTemplateExtension: "The template must be a valid .txt, .htm or .html file",
@@ -115,7 +122,8 @@ define([], function () {
                 SearchQueryTextDefaultValue: "Default value",
                 SourceDestinationFieldLabel: "Destination field name",
                 SourceDestinationFieldDescription: "Destination field to use in this Web Part to match the selected values",
-                AvailableFieldValuesFromResults: "Field containing the filter value"
+                AvailableFieldValuesFromResults: "Field containing the filter value",
+                BidirectionalConnectionWarning: "The connected filters Web Part has not been configured to connect back to this search results Web Part. Both web parts must be connected to each other for filters to work correctly."
             },
             InformationPage: {
                 Extensibility: {

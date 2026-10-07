@@ -1,5 +1,5 @@
 import { isEmpty } from "@microsoft/sp-lodash-subset";
-import { IDataFilter, IDataFilterConfiguration, FilterType, IDataFilterResult, FilterComparisonOperator } from "@pnp/modern-search-extensibility";
+import { IDataFilter, IDataFilterConfiguration, FilterType, IDataFilterResult, FilterComparisonOperator, FilterConditionOperator } from "@pnp/modern-search-extensibility";
 import { BuiltinTokenNames } from "../services/tokenService/TokenService";
 import { BuiltinFilterTypes } from "../layouts/AvailableTemplates";
 
@@ -15,6 +15,18 @@ export class DataFilterHelper {
         const normalizedValue = value.trim().replace(/^"(.*)"$/, '$1');
         const isoDatePattern = /^\d{4}-\d{2}-\d{2}(?:[Tt ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,7})?)?(?:[Zz]|[+-]\d{2}:?\d{2})?)?$/;
         return isoDatePattern.test(normalizedValue) && dayjs(normalizedValue).isValid();
+    }
+
+    /**
+     * Escapes a string value so it can be safely wrapped in double quotes for KQL/FQL refinements.
+     */
+    private static quoteStringRefinementValue(value: string): string {
+        const normalizedValue = `${value ?? ''}`;
+        const escapedValue = normalizedValue
+            .replaceAll('\\', String.raw`\\`)
+            .replaceAll('"', String.raw`\"`);
+
+        return `"${escapedValue}"`;
     }
 
     /**
@@ -92,12 +104,12 @@ export class DataFilterHelper {
     }
 
     /**
-     * Build the refinement condition in FQL format
+     * Build the refinement condition in KQL format
      * @param selectedFilters The selected filter array
      * @param dayjs The dayjs instance to resolve dates
-     * @param encodeTokens If true, encodes the taxonomy refinement tokens in UTF-8 to work with GET requests. Javascript encodes natively in UTF-16 by default.
+     * @param filterOperator The logical operator (AND/OR) to use between filters. Defaults to OR.
      */
-    public static buildKqlRefinementString(selectedFilters: IDataFilter[], dayjs: any): string {
+    public static buildKqlRefinementString(selectedFilters: IDataFilter[], dayjs: any, filterOperator: FilterConditionOperator = FilterConditionOperator.OR): string {
         let refinementQueryConditions: string[] = [];
         selectedFilters.forEach(filter => {
 
@@ -121,7 +133,7 @@ export class DataFilterHelper {
                             }
                         }
                         else {
-                            return `${filterName}:"${refinement.name}"`;
+                            return `${filterName}:${DataFilterHelper.quoteStringRefinementValue(refinement.name)}`;
                         }
                     }).filter(c => c);
 
@@ -142,7 +154,8 @@ export class DataFilterHelper {
             }
         });
 
-        return refinementQueryConditions.join(" OR "); // only used when building aggregation with OR between filters
+        const filterJoinOperator = filterOperator === FilterConditionOperator.AND ? " AND " : " OR ";
+        return refinementQueryConditions.join(filterJoinOperator);
     }
 
     /**
@@ -195,9 +208,18 @@ export class DataFilterHelper {
                         value = DataFilterHelper.fixRefinableYesNoFilter(filter, value);
                     }
 
-                    // Enclose the expression with quotes if the value contains spaces, or number only
-                    if ((/\s/.test(value) && value.indexOf('range') === -1) || (filter.filterName.indexOf("RefinableString") && /^\d+$/.test(value))) {
-                        value = `"${value}"`;
+                    // Some search environments fail to match hex-encoded ('ǂǂ<hex>') FQL tokens containing
+                    // multi-byte UTF-8 characters (e.g. accented letters), returning no results even though
+                    // matching items exist. Re-encode the value as a plain quoted FQL string instead.
+                    // Taxonomy tokens (GP0/GPP/L0) are left hex-encoded since they rely on it.
+                    if (!encodeTokens) {
+                        value = DataFilterHelper.decodeStringRefinementToken(value);
+                    }
+
+                    // Enclose bare string operands containing spaces or pipes, but leave FQL expressions executable.
+                    const isFqlExpression = /^(?:or|and|range)\(/i.test(value);
+                    if ((!isFqlExpression && (/\s/.test(value) || value.includes('|')) && !/^".*"$/.test(value)) || (filter.filterName.includes("RefinableString") && /^\d+$/.test(value))) {
+                        value = DataFilterHelper.quoteStringRefinementValue(value);
                     }
 
                     return /ǂǂ/.test(value) && encodeTokens ? encodeURIComponent(value) : value;
@@ -254,9 +276,18 @@ export class DataFilterHelper {
                         refinementToken = DataFilterHelper.fixRefinableYesNoFilter(filter, refinementToken);
                     }
 
+                    // Some search environments fail to match hex-encoded ('ǂǂ<hex>') FQL tokens containing
+                    // multi-byte UTF-8 characters (e.g. accented letters), returning no results even though
+                    // matching items exist. Re-encode the value as a plain quoted FQL string instead.
+                    // Taxonomy tokens (GP0/GPP/L0) are left hex-encoded since they rely on it.
+                    if (!encodeTokens) {
+                        refinementToken = DataFilterHelper.decodeStringRefinementToken(refinementToken);
+                    }
+
                     // Enclose the expression with quotes if the value contains spaces
-                    if (/\s/.test(refinementToken) && refinementToken.indexOf('range') === -1) {
-                        refinementToken = `"${refinementToken}"`;
+                    const isFqlExpression = /^(?:or|and|range)\(/i.test(refinementToken);
+                    if (!isFqlExpression && (/\s/.test(refinementToken) || refinementToken.includes('|')) && !/^".*"$/.test(refinementToken)) {
+                        refinementToken = DataFilterHelper.quoteStringRefinementValue(refinementToken);
                     }
 
                     refinementQueryConditions.push(`${filter.filterName}:${refinementToken}`);
@@ -265,6 +296,42 @@ export class DataFilterHelper {
         });
 
         return refinementQueryConditions;
+    }
+
+    /**
+     * Decodes a hex-encoded FQL refinement token (e.g. `"ǂǂ4176616e6365c3a9"`) back into a plain,
+     * quoted FQL string literal using its literal UTF-8 value (e.g. `"Avancé"`).
+     * SharePoint hex-encodes refinement tokens by default and, under normal circumstances, resending
+     * the token as-is round-trips correctly. However some search environments fail to match hex-encoded
+     * tokens that contain multi-byte UTF-8 characters (e.g. accented letters), returning no results even
+     * though matching items exist. Sending the plain, quoted value instead avoids the issue.
+     * Taxonomy tokens (GP0/GPP/L0) are returned unchanged since they rely on hex-encoding to safely carry
+     * the '|' and '#' characters used in their format.
+     * @param token the FQL token to decode, as produced by `buildFqlRefinementString`
+     */
+    private static decodeStringRefinementToken(token: string): string {
+        if (!token || typeof token !== 'string') {
+            return token;
+        }
+
+        const match = /^"?ǂǂ([0-9a-fA-F]+)"?$/.exec(token.trim());
+        if (!match || match[1].length % 2 !== 0) {
+            return token;
+        }
+
+        try {
+            const percentEncoded = match[1].match(/.{2}/g).map(bytePair => `%${bytePair}`).join('');
+            const decoded = decodeURIComponent(percentEncoded);
+
+            // Taxonomy tokens must remain hex-encoded
+            if (/^(GP0|GPP|L0)\|#/.test(decoded)) {
+                return token;
+            }
+
+            return DataFilterHelper.quoteStringRefinementValue(decoded);
+        } catch {
+            return token;
+        }
     }
 
     private static decodeHexRefinementToken(value: string): string | null {

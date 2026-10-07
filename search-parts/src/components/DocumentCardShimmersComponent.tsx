@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Shimmer, ShimmerElementType as ElemType, ShimmerElementsGroup, ITheme } from '@fluentui/react';
+import { Shimmer, ShimmerElementType as ElemType, ShimmerElementsGroup, ITheme, getTheme } from '@fluentui/react';
 import * as ReactDOM from 'react-dom';
 import { BaseWebComponent } from '@pnp/modern-search-extensibility';
 import { IReadonlyTheme } from "@microsoft/sp-component-base";
@@ -18,6 +18,14 @@ export interface DocumentCardShimmersComponentProps {
 }
 
 export class DocumentCardShimmersComponent extends React.Component<DocumentCardShimmersComponentProps, {}> {
+
+    /**
+     * Returns the shimmer background color from the theme, tolerating a missing `themeVariant`
+     * (which can briefly happen when entering/leaving page edit mode).
+     */
+    private get _backgroundColor(): string | undefined {
+        return this.props.themeVariant?.semanticColors?.bodyBackground;
+    }
 
     public render() {
 
@@ -40,14 +48,14 @@ export class DocumentCardShimmersComponent extends React.Component<DocumentCardS
             minWidth: 150
         }}>
             <Shimmer
-                theme={this.props.themeVariant as ITheme}
+                theme={(this.props.themeVariant as ITheme) || getTheme()}
                 customElementsGroup={
                     <ShimmerElementsGroup
                         shimmerElements={[
                             { type: ElemType.line, width: '100%', height: 196 },
                         ]}
-                        backgroundColor={this.props.themeVariant.semanticColors.bodyBackground}
-                        theme={this.props.themeVariant as ITheme}
+                        backgroundColor={this._backgroundColor}
+                        theme={(this.props.themeVariant as ITheme) || getTheme()}
                     />
                 }
                 isDataLoaded={false}
@@ -59,14 +67,14 @@ export class DocumentCardShimmersComponent extends React.Component<DocumentCardS
                 paddingLeft: 16,
             }}>
                 <Shimmer
-                    theme={this.props.themeVariant as ITheme}
+                    theme={(this.props.themeVariant as ITheme) || getTheme()}
                     customElementsGroup={
                         <div style={{ display: 'flex' }}>
                             <ShimmerElementsGroup
-                                theme={this.props.themeVariant as ITheme}
+                                theme={(this.props.themeVariant as ITheme) || getTheme()}
                                 flexWrap={true}
                                 width="100%"
-                                backgroundColor={this.props.themeVariant.semanticColors.bodyBackground}
+                                backgroundColor={this._backgroundColor}
                                 shimmerElements={[
                                     { type: ElemType.line, width: '30%', height: 11 },
                                     { type: ElemType.gap, width: '70%', height: 11 },
@@ -88,18 +96,18 @@ export class DocumentCardShimmersComponent extends React.Component<DocumentCardS
                 paddingLeft: 16
             }}>
                 <Shimmer
-                    theme={this.props.themeVariant as ITheme}
+                    theme={(this.props.themeVariant as ITheme) || getTheme()}
                     customElementsGroup={
                         <div style={{ display: 'flex' }}>
                             <ShimmerElementsGroup
-                                theme={this.props.themeVariant as ITheme}
+                                theme={(this.props.themeVariant as ITheme) || getTheme()}
                                 shimmerElements={[{ type: ElemType.circle, height: 32 }, { type: ElemType.gap, width: 10, height: 40 }]}
-                                backgroundColor={this.props.themeVariant.semanticColors.bodyBackground}
+                                backgroundColor={this._backgroundColor}
                             />
                             <ShimmerElementsGroup
-                                theme={this.props.themeVariant as ITheme}
+                                theme={(this.props.themeVariant as ITheme) || getTheme()}
                                 flexWrap={true}
-                                backgroundColor={this.props.themeVariant.semanticColors.bodyBackground}
+                                backgroundColor={this._backgroundColor}
                                 width="100%"
                                 shimmerElements={[
                                     { type: ElemType.line, width: '100%', height: 10 },
@@ -130,10 +138,10 @@ export class DocumentCardShimmersComponent extends React.Component<DocumentCardS
             }}
         >
             <Shimmer
-                theme={this.props.themeVariant as ITheme}
+                theme={(this.props.themeVariant as ITheme) || getTheme()}
                 customElementsGroup={
                     <ShimmerElementsGroup
-                        backgroundColor={this.props.themeVariant.semanticColors.bodyBackground}
+                        backgroundColor={this._backgroundColor}
                         shimmerElements={[
                             { type: ElemType.line, height: 106, width: 144 },
                             { type: ElemType.gap, width: 16, height: 80 }
@@ -147,14 +155,14 @@ export class DocumentCardShimmersComponent extends React.Component<DocumentCardS
                 width: '100%'
             }}>
                 <Shimmer
-                    theme={this.props.themeVariant as ITheme}
+                    theme={(this.props.themeVariant as ITheme) || getTheme()}
                     customElementsGroup={
                         <div>
                             <div style={{ display: 'flex' }}>
                                 <ShimmerElementsGroup
-                                    theme={this.props.themeVariant as ITheme}
+                                    theme={(this.props.themeVariant as ITheme) || getTheme()}
                                     flexWrap={true}
-                                    backgroundColor={this.props.themeVariant.semanticColors.bodyBackground}
+                                    backgroundColor={this._backgroundColor}
                                     width="100%"
                                     shimmerElements={[
                                         { type: ElemType.line, width: '100%', height: 10 },
@@ -167,17 +175,17 @@ export class DocumentCardShimmersComponent extends React.Component<DocumentCardS
                     }
                 />
                 <Shimmer
-                    theme={this.props.themeVariant as ITheme}
+                    theme={(this.props.themeVariant as ITheme) || getTheme()}
                     customElementsGroup={
                         <div style={{ display: 'flex', marginTop: 10 }}>
                             <ShimmerElementsGroup
-                                backgroundColor={this.props.themeVariant.semanticColors.bodyBackground}
-                                theme={this.props.themeVariant as ITheme}
+                                backgroundColor={this._backgroundColor}
+                                theme={(this.props.themeVariant as ITheme) || getTheme()}
                                 shimmerElements={[{ type: ElemType.circle, height: 32 }, { type: ElemType.gap, width: 10, height: 40 }]}
                             />
                             <ShimmerElementsGroup
-                                backgroundColor={this.props.themeVariant.semanticColors.bodyBackground}
-                                theme={this.props.themeVariant as ITheme}
+                                backgroundColor={this._backgroundColor}
+                                theme={(this.props.themeVariant as ITheme) || getTheme()}
                                 flexWrap={true}
                                 width="100%"
                                 shimmerElements={[

@@ -21,6 +21,17 @@
             </div>
 
             <div class="template--toolbar">
+                            {{#and properties.layoutProperties.enableDetails @root.properties.itemSelectionProps.allowItemSelection}}
+                                <pnp-details-selected-item-button
+                                    data-items="{{JSONstringify data.items}}"
+                                    data-context="{{JSONstringify (truncateContext @root)}}"
+                                    data-theme-variant="{{JSONstringify @root.theme}}"
+                                    data-file-extension-field="{{@root.slots.FileType}}"
+                                    data-is-container-field="{{@root.slots.IsFolder}}"
+                                    data-allow-multi="{{properties.itemSelectionProps.allowMulti}}"
+                                >
+                                </pnp-details-selected-item-button>
+                            {{/and}}
               {{#and properties.layoutProperties.enableDownload @root.properties.itemSelectionProps.allowItemSelection}}
                 <pnp-download-selected-items-button 
                   data-items="{{JSONstringify data.items}}" 
@@ -58,7 +69,7 @@
                         data-location="\{{SiteTitle}}"
                         data-preview-image="\{{slot item @root.slots.PreviewImageUrl}}" 
                         data-preview-url="\{{slot item @root.slots.PreviewUrl}}" 
-                        data-date="\{{getDate (slot item @root.slots.Date) 'LL'}}" 
+                        data-date="{{JSONstringify (getDate (slot item @root.slots.Date) 'LL')}}" 
                         data-href="\{{slot item @root.slots.Path}}" 
                         data-author="\{{slot item @root.slots.Author}}" 
                         data-profile-image="/_layouts/15/userphoto.aspx?size=L&username=\{{getUserEmail (slot item @root.slots.UserEmail)}}" 

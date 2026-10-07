@@ -6,22 +6,32 @@ import {
     ServiceKey,
     ServiceScope,
 } from "@microsoft/sp-core-library";
-import { SPHttpClient, SPHttpClientResponse } from "@microsoft/sp-http";
+import { ISPHttpClientOptions, SPHttpClient, SPHttpClientResponse } from "@microsoft/sp-http";
 import * as Handlebars from "handlebars";
 import {
     trimEnd,
     get,
 } from "@microsoft/sp-lodash-subset";
+import dayjs from "dayjs";
+import advancedFormat from "dayjs/plugin/advancedFormat";
 import { DateHelper } from "../../helpers/DateHelper";
+
+// Ensure `advancedFormat` is registered on the shared dayjs singleton before any
+// helper that uses tokens like `X` / `x` runs. Without this, `dayjs(...).format('X')`
+// would echo back the literal "X" — breaking handlebars templates that compare
+// Unix timestamps (see #4741).
+dayjs.extend(advancedFormat);
 import { PageContext } from "@microsoft/sp-page-context";
 import {
     IComponentDefinition,
     IExtensibilityLibrary,
+    IFilterControlDefinition,
     IResultTemplates,
     LayoutRenderType,
 } from "@pnp/modern-search-extensibility";
 import { IComponentFieldsConfiguration } from "../../models/common/IComponentFieldsConfiguration";
 import { initializeFileTypeIcons } from "@fluentui/react-file-type-icons";
+import { FileTypeIconHelper } from "../../helpers/FileTypeIconHelper";
 import { GlobalSettings } from "@fluentui/react";
 import {
     IDataResultType,
@@ -37,9 +47,16 @@ import { getHandlebarsHelpers } from "../../helpers/HandlebarsHelpers";
 import { ServiceScopeHelper } from "../../helpers/ServiceScopeHelper";
 import { DomPurifyHelper } from "../../helpers/DomPurifyHelper";
 import { IAdaptiveCardAction } from "@pnp/modern-search-extensibility";
+import { ExpiringPromiseCache } from "./ExpiringPromiseCache";
+import { ExpiringSessionStorageCache } from "./ExpiringSessionStorageCache";
 
 const TemplateService_ServiceKey = "PnPModernSearchTemplateService";
 const TemplateService_LogSource = "PnPModernSearch:TemplateService";
+const ExternalTemplateCacheKey = "PnPModernSearch:ExternalTemplateCache:v2";
+const ExternalTemplateSessionStorageKey = "PnPModernSearch:ExternalTemplate:v2";
+const ExternalTemplateMemoryCacheTtlMs = 60 * 1000;
+const ExternalTemplateSessionCacheTtlMs = 60 * 60 * 1000;
+const ExternalTemplateCacheMaxEntries = 100;
 
 /**
  * The CSS identifer to load the template markup from a layout html file
@@ -62,11 +79,19 @@ export class TemplateService implements ITemplateService {
     private _adaptiveCardsTemplating;
     private _serializationContext;
     private _extendedHelpersPromise: Promise<void> | null = null;
+    private readonly externalTemplateSessionCache = new ExpiringSessionStorageCache(
+        ExternalTemplateSessionStorageKey,
+        ExternalTemplateSessionCacheTtlMs
+    );
 
     /**
-     * The dayjs library reference
+     * The dayjs library reference. Initialized synchronously to the imported
+     * singleton so helpers that depend on it (e.g. `getDate`, `dayDiff`) can be
+     * invoked from templates rendered before `dateHelper.moment()` resolves its
+     * locale chunk. The async assignment below still runs and updates the same
+     * singleton's locale configuration.
      */
-    private dayjs: any;
+    private dayjs: any = dayjs;
 
     private timeZoneBias = {
         WebBias: 0,
@@ -85,6 +110,13 @@ export class TemplateService implements ITemplateService {
     private _customElementHelper;
     private _customElementHelperPromise: Promise<void>;
 
+    // Resolves once the async service initialization (Handlebars namespace creation and
+    // out-of-the-box helper/partial registration) has completed. Declaration order matters:
+    // `_initResolve` must be declared before `_initPromise` so the promise executor can assign
+    // it without a later field initializer resetting it to undefined.
+    private _initResolve: () => void;
+    private _initPromise: Promise<void> = new Promise<void>((resolve) => { this._initResolve = resolve; });
+
     get Handlebars(): typeof Handlebars {
         return this._handlebars;
     }
@@ -100,6 +132,19 @@ export class TemplateService implements ITemplateService {
 
     set AdaptiveCardsExtensibilityLibraries(value: IExtensibilityLibrary[]) {
         this._adaptiveCardsExtensibilityLibraries = value;
+    }
+
+    /**
+     * Custom filter controls coming from extensibility libraries, if any
+     */
+    private _customFilterControls: IFilterControlDefinition[] = [];
+
+    get CustomFilterControls(): IFilterControlDefinition[] {
+        return this._customFilterControls;
+    }
+
+    set CustomFilterControls(value: IFilterControlDefinition[]) {
+        this._customFilterControls = value || [];
     }
 
     get TEMPLATE_ID_PREFIX(): string {
@@ -119,6 +164,9 @@ export class TemplateService implements ITemplateService {
         this.serviceScope = serviceScope;
 
         serviceScope.whenFinished(async () => {
+            // Wrapped in try/finally so the readiness promise is always settled — even if a step
+            // below throws — and callers awaiting ensureHandlebarsHelpersLoaded() never hang.
+            try {
             // Consume from the root scope
             this.pageContext = serviceScope.consume<PageContext>(
                 PageContext.serviceKey
@@ -172,16 +220,103 @@ export class TemplateService implements ITemplateService {
             // Register helpers
             this.registerCustomHelpers();
 
+            // Graceful fallbacks for missing helpers. When an enabled
+            // extensibility library fails to load, its custom Handlebars
+            // helpers (e.g. {{myExt-foo}}) are not registered. The default
+            // Handlebars behavior throws ("Missing helper: ..."), which
+            // crashes the entire template render and bombs the web part.
+            // Instead, render an inline placeholder so the rest of the
+            // template still renders and the problem is discoverable.
+            const hb: any = this._handlebars;
+            const escapeFn = hb.Utils?.escapeExpression ?? String;
+            // Shared placeholder builder so the helperMissing and
+            // blockHelperMissing fallbacks stay visually consistent and
+            // easy to maintain in one place.
+            const buildMissingPlaceholder = (label: string, name: string, title: string): string =>
+                `<span style="color:#a4262c;background:#fde7e9;padding:1px 4px;border-radius:3px;font-family:monospace;font-size:11px;" title="${title}">[missing ${label}: ${escapeFn(name)}]</span>`;
+            const placeholderTitle = "Handlebars helper not registered. If this comes from an extensibility library, the library may have failed to load.";
+            hb.registerHelper("helperMissing", function (this: any, ...args: any[]) {
+                // Handlebars calls helperMissing for BOTH:
+                //   (a) genuine missing helper calls with params/hash:
+                //       {{foo "x" y=1}}    -> args = [arg, ..., options]   (length >= 2)
+                //   (b) bare expressions where Handlebars couldn't resolve the name
+                //       as a property on the current context AND no helper of that
+                //       name is registered:
+                //       {{Title}}          -> args = [options]              (length === 1)
+                //       {{myExt-foo}}      -> args = [options]              (length === 1)
+                //
+                // Case (b) ambiguously covers both "data field that's undefined"
+                // (very common when data hasn't loaded yet) and "arg-less helper
+                // that was never registered" (e.g. an extensibility library failed
+                // to load). To minimise false positives while still surfacing
+                // genuinely broken helpers, we use a name heuristic: hyphen-
+                // delimited names (e.g. `myExt-foo`, `pnp-iconfile`) are almost
+                // certainly helpers/components, while typical data fields are
+                // single-word identifiers (`Title`, `Path`) or camel/Pascal-case.
+                // NOTE: `args.at(-1)` would be cleaner but is an ES2022 runtime
+                // feature; this code is shipped to ES2017-targeted bundles so we
+                // keep the index-based form to avoid relying on a polyfill in
+                // older runtimes. SonarCloud S7755 (prefer-at) is suppressed below.
+                const options = args[args.length - 1]; // NOSONAR
+                const name = options?.name ?? "(unknown)";
+                const looksLikeHelperOrComponent = name.includes("-");
+                if (args.length <= 1 && !looksLikeHelperOrComponent) {
+                    // Likely an undefined data field \u2014 stay silent to match
+                    // Handlebars' default behaviour and avoid red noise on every
+                    // missing property reference.
+                    return undefined;
+                }
+                console.warn(`[TemplateService] Missing Handlebars helper '${name}'. The template references a helper that is not registered. If '${name}' comes from an extensibility library, the library may have failed to load \u2014 check earlier console output.`);
+                // Use the per-WP instance's SafeString so the value is
+                // produced by the same Handlebars instance that renders it.
+                return new hb.SafeString(buildMissingPlaceholder("helper", name, placeholderTitle));
+            });
+            hb.registerHelper("blockHelperMissing", function (this: any, context: any, options: any) {
+                const name = options?.name ?? "(unknown)";
+                console.warn(`[TemplateService] Missing Handlebars block helper '#${name}'. Rendering {{else}} fallback (if any) and an inline placeholder. If '${name}' comes from an extensibility library, the library may have failed to load \u2014 check earlier console output.`);
+                // Default Handlebars behaviour for an unresolved block helper is:
+                //   - if context is truthy, render the main body (options.fn)
+                //   - if context is falsy, render the {{else}} block (options.inverse)
+                // Returning "" would silently drop any {{else}} fallback the author
+                // provided. Delegate to options.inverse(this) so {{else}} content
+                // still renders, then append a small placeholder so the missing
+                // helper is discoverable.
+                const inverse = options && typeof options.inverse === "function"
+                    ? options.inverse(this)
+                    : "";
+                return new hb.SafeString(inverse + buildMissingPlaceholder("block helper", `#${name}`, placeholderTitle));
+            });
+
+            // Provide the SharePoint CDN prefix so file type icons are served from the same CDN host
+            // SharePoint uses (more likely reachable in restricted environments). The version-correct
+            // icon path still comes from Fluent. This is reused by FileIconComponent via
+            // FileTypeIconHelper.getBaseUrl(), so it must be set even when another component on the page
+            // already initialized the Fluent file type icons (otherwise getBaseUrl() falls back to the
+            // Fluent default host).
+            FileTypeIconHelper.setCdnPrefix(this.pageContext?.legacyPageContext?.cdnPrefix);
+
             // Register icons and pull the fonts from the default SharePoint cdn.
             // Do not load icons twice as it may generate warnings
             if (!GlobalSettings.getValue("fileTypeIconsInitialized")) {
-                initializeFileTypeIcons();
+                initializeFileTypeIcons(FileTypeIconHelper.getBaseUrl());
                 GlobalSettings.setValue("fileTypeIconsInitialized", true);
             }
-
-            // Load Microsoft Graph Toolkit dynamically
-            this._customElementHelperPromise = this._initMgtCustomElementHelper();
+            } finally {
+                // Signal that initialization has completed (or failed) so awaiters never hang.
+                this._initResolve();
+            }
         });
+    }
+
+    /**
+     * Ensures the Handlebars namespace is initialized and every out-of-the-box helper
+     * (base, custom and the lazily-loaded extended set) and partial is registered.
+     * Used to reliably tell out-of-the-box Handlebars customizations apart from those
+     * contributed by an extensibility library before deciding whether to load one.
+     */
+    public async ensureHandlebarsHelpersLoaded(): Promise<void> {
+        await this._initPromise;
+        await this._ensureExtendedHelpers();
     }
 
     /**
@@ -208,8 +343,11 @@ export class TemplateService implements ITemplateService {
 
     private async _initMgtCustomElementHelper(): Promise<void> {
         if (!this._customElementHelper) {
+            // Only the lightweight mgt-element customElementHelper (element-name prefix
+            // plumbing) is loaded here. The heavy mgt-components / fast-foundation bundle
+            // is loaded separately via loadMsGraphToolkit, gated by useMicrosoftGraphToolkit.
             const { customElementHelper } = await import(
-                /* webpackChunkName: 'pnp-modern-search-microsoft-graph-toolkit' */
+                /* webpackChunkName: 'pnp-modern-search-mgt-element' */
                 "@microsoft/mgt-element/dist/es6/components/customElementHelper"
             );
             this._customElementHelper = customElementHelper;
@@ -217,8 +355,59 @@ export class TemplateService implements ITemplateService {
     }
 
     private async _ensureMgtCustomElementHelper(): Promise<void> {
-        if (this._customElementHelperPromise) {
-            await this._customElementHelperPromise;
+        // Lazily load the helper on first actual need (disambiguation / adaptive cards)
+        // instead of eagerly on every render, so pages that don't use MGT never load it.
+        if (!this._customElementHelperPromise) {
+            this._customElementHelperPromise = this._initMgtCustomElementHelper();
+        }
+        await this._customElementHelperPromise;
+    }
+
+    /**
+     * Safely reads the CSS rules from a stylesheet. Accessing `cssRules` can
+     * throw (e.g. a SecurityError for a cross-origin stylesheet), which would
+     * otherwise abort template rendering. Returns null when the rules cannot be
+     * read so callers can fall back to text-based parsing.
+     */
+    private safeGetCssRules(sheet: CSSStyleSheet | null | undefined): CSSRuleList | null {
+        try {
+            return sheet?.cssRules ?? null;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Re-parses raw CSS text through a throwaway, inert DOMParser document to
+     * obtain a populated CSSOM stylesheet. This is used when a style element is
+     * detached (e.g. created via Range.createContextualFragment) and therefore
+     * exposes a null `style.sheet`. Going through the browser's real CSS engine
+     * preserves modern features such as CSS nesting, which the regex fallback
+     * cannot handle. The document produced by DOMParser is inert (scripts never
+     * run) and the CSS text is assigned via textContent, so no markup breakout
+     * or code execution is possible.
+     */
+    private parseCssTextToSheet(cssText: string): CSSStyleSheet | null {
+        if (!cssText?.trim()) {
+            return null;
+        }
+
+        try {
+            // Build the throwaway <style> inside an inert DOMParser document. It
+            // is never attached to the live document, so it triggers no
+            // @import/url() network fetches and does not affect the page.
+            // Appending it to that document's head is what populates its sheet.
+            const doc = new DOMParser().parseFromString(
+                "<!DOCTYPE html><html><head></head><body></body></html>",
+                "text/html"
+            );
+            const styleEl = doc.createElement("style");
+            styleEl.textContent = cssText;
+            doc.head.appendChild(styleEl);
+
+            return (styleEl.sheet as CSSStyleSheet) ?? null;
+        } catch {
+            return null;
         }
     }
 
@@ -228,12 +417,23 @@ export class TemplateService implements ITemplateService {
     ): string {
         let prefixedStyles: string[] = [];
 
-        const sheet: any = style.sheet;
+        let sheet: CSSStyleSheet | null = style.sheet as CSSStyleSheet;
+
+        // When the style element is detached (e.g. created via
+        // Range.createContextualFragment), style.sheet is null and the CSSOM is
+        // unavailable. Re-parse the CSS text through a throwaway DOMParser
+        // document to obtain a populated sheet so the CSSOM path below can run.
+        // This preserves modern CSS features such as nesting, which the regex
+        // fallback further down cannot handle.
+        let cssRules = this.safeGetCssRules(sheet);
+
+        if (!cssRules) {
+            sheet = this.parseCssTextToSheet(style.textContent || style.innerText || "");
+            cssRules = this.safeGetCssRules(sheet);
+        }
 
         // Try to use CSSOM if available (for live DOM elements)
-        if ((sheet as CSSStyleSheet)?.cssRules) {
-            const cssRules = (sheet as CSSStyleSheet).cssRules;
-
+        if (cssRules) {
             for (let j = 0; j < cssRules.length; j++) {
                 const cssRule: CSSRule = cssRules.item(j);
 
@@ -464,7 +664,57 @@ export class TemplateService implements ITemplateService {
      */
     public async getFileContent(
         fileUrl: string,
-        fileFormat: FileFormat
+        fileFormat: FileFormat,
+        bypassCache: boolean = false
+    ): Promise<string> {
+        const normalizedFileUrl = fileUrl?.trim();
+        if (!normalizedFileUrl) {
+            throw new TypeError("fileUrl");
+        }
+
+        const userId = this.pageContext?.legacyPageContext?.userId ?? "anonymous";
+        const cacheKey = `${userId}:${fileFormat}:${normalizedFileUrl}`;
+
+        if (bypassCache) {
+            const content = await this.loadFileContent(normalizedFileUrl, fileFormat, true);
+            this.getExternalTemplateCache().delete(cacheKey);
+            this.externalTemplateSessionCache.set(cacheKey, content);
+            return content;
+        }
+
+        return this.getExternalTemplateCache().get(
+            cacheKey,
+            async () => {
+                const sessionContent = this.externalTemplateSessionCache.get(cacheKey);
+                if (sessionContent !== undefined) {
+                    return sessionContent;
+                }
+
+                const content = await this.loadFileContent(normalizedFileUrl, fileFormat);
+                this.externalTemplateSessionCache.set(cacheKey, content);
+                return content;
+            }
+        );
+    }
+
+    private getExternalTemplateCache(): ExpiringPromiseCache<string> {
+        let cache = GlobalSettings.getValue<ExpiringPromiseCache<string>>(ExternalTemplateCacheKey);
+
+        if (!cache) {
+            cache = new ExpiringPromiseCache<string>(
+                ExternalTemplateMemoryCacheTtlMs,
+                ExternalTemplateCacheMaxEntries
+            );
+            GlobalSettings.setValue(ExternalTemplateCacheKey, cache);
+        }
+
+        return cache;
+    }
+
+    private async loadFileContent(
+        fileUrl: string,
+        fileFormat: FileFormat,
+        bypassBrowserCache: boolean = false
     ): Promise<string> {
         let headers: HeadersInit = {
             "X-ClientService-ClientTag": Constants.X_CLIENTSERVICE_CLIENTTAG,
@@ -476,12 +726,15 @@ export class TemplateService implements ITemplateService {
             headers["Accept"] = "application/json";
         }
 
+        const requestOptions: ISPHttpClientOptions = { headers };
+        if (bypassBrowserCache) {
+            requestOptions.cache = "no-store";
+        }
+
         const response: SPHttpClientResponse = await this.spHttpClient.get(
             fileUrl,
             SPHttpClient.configurations.v1,
-            {
-                headers,
-            }
+            requestOptions
         );
 
         if (response.ok) {
@@ -634,7 +887,7 @@ export class TemplateService implements ITemplateService {
                         wc.componentClass.prototype._serviceScope =
                             ServiceScopeHelper.getRootServiceScope(this.serviceScope);
 
-                        wc.componentClass.prototype._moment = this.dayjs;
+                        wc.componentClass.prototype._dayjs = this.dayjs;
                         window.customElements.define(wc.componentName, wc.componentClass);
                     } else {
                         // Update the instances array for all calling Web Parts
@@ -768,13 +1021,14 @@ export class TemplateService implements ITemplateService {
      * @param resultTypes the configured result types from the property pane
      */
     public async registerResultTypes(
-        resultTypes: IDataResultType[]
+        resultTypes: IDataResultType[],
+        bypassCache: boolean = false
     ): Promise<void> {
         await this._ensureExtendedHelpers();
         this.Handlebars.unregisterPartial("resultTypes");
 
         if (resultTypes.length > 0) {
-            let content = await this._buildCondition(resultTypes, resultTypes[0], 0);
+            let content = await this._buildCondition(resultTypes, resultTypes[0], 0, bypassCache);
             let template = this.Handlebars.compile(content);
 
             this.Handlebars.registerPartial("resultTypes", template);
@@ -946,7 +1200,8 @@ export class TemplateService implements ITemplateService {
     private async _buildCondition(
         resultTypes: IDataResultType[],
         currentResultType: IDataResultType,
-        currentIdx: number
+        currentIdx: number,
+        bypassCache: boolean
     ): Promise<string> {
         let conditionBlockContent;
         let templateContent = currentResultType.inlineTemplateContent;
@@ -954,7 +1209,8 @@ export class TemplateService implements ITemplateService {
         if (currentResultType.externalTemplateUrl) {
             templateContent = await this.getFileContent(
                 currentResultType.externalTemplateUrl,
-                FileFormat.Text
+                FileFormat.Text,
+                bypassCache
             );
         }
 
@@ -995,7 +1251,8 @@ export class TemplateService implements ITemplateService {
                 conditionBlockContent = await this._buildCondition(
                     resultTypes,
                     resultTypes[currentIdx + 1],
-                    currentIdx + 1
+                    currentIdx + 1,
+                    bypassCache
                 );
             }
 
@@ -1017,6 +1274,7 @@ export class TemplateService implements ITemplateService {
         this.Handlebars.registerHelper(
             "getDate",
             ((date: string, format: string, timeHandling?: number, isZ?: boolean) => {
+                const originalDate = date;
                 try {
                     if (isZ && !date.toUpperCase().endsWith("Z")) {
                         if (date.indexOf(" ") !== -1) {
@@ -1059,11 +1317,17 @@ export class TemplateService implements ITemplateService {
                                 date = trimEnd(date, "Z");
                             }
                         }
-                        return this.dayjs(new Date(date)).format(format);
+
+                        const resolvedDate = new Date(date);
+                        if (Number.isNaN(resolvedDate.getTime())) {
+                            return originalDate;
+                        }
+
+                        return this.dayjs(resolvedDate).format(format);
                     }
                     // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 } catch (error) {
-                    return date;
+                    return originalDate;
                 }
             }).bind(this)
         );
@@ -1096,6 +1360,127 @@ export class TemplateService implements ITemplateService {
                 return Math.abs(dayCount);
             }
         );
+
+        const hb: any = this._handlebars;
+        const escapeFn = hb.Utils?.escapeExpression ?? String;
+
+        this.Handlebars.registerHelper("hierarchicalOperator", (filter: any, instanceId: string, theme: any) => {
+            if (!filter?.isMulti) {
+                return "";
+            }
+
+            return new hb.SafeString(`
+                <div class="filter--option">
+                    <pnp-filteroperator
+                        data-instance-id="${escapeFn(instanceId)}"
+                        data-filter-name="${escapeFn(filter.filterName)}"
+                        data-operator="${escapeFn(filter.operator)}"
+                        data-theme-variant="${escapeFn(JSON.stringify(theme))}"
+                    ></pnp-filteroperator>
+                </div>
+            `);
+        });
+
+        this.Handlebars.registerHelper("hierarchicalMultiselect", (filter: any, instanceId: string, theme: any) => {
+            if (!filter?.isMulti) {
+                return "";
+            }
+
+            return new hb.SafeString(`
+                <pnp-filtermultiselect
+                    data-instance-id="${escapeFn(instanceId)}"
+                    data-filter-name="${escapeFn(filter.filterName)}"
+                    data-apply-disabled="${filter.canApply ? 'false' : 'true'}"
+                    data-clear-disabled="${filter.canClear ? 'false' : 'true'}"
+                    data-theme-variant="${escapeFn(JSON.stringify(theme))}"
+                >
+                </pnp-filtermultiselect>
+            `);
+        });
+
+        // Block helper used by the builtin filter layouts to branch on filters rendered by a custom
+        // filter control coming from an extensibility library.
+        // Usage: {{#isCustomFilterControl filter}} custom {{else}} builtin {{/isCustomFilterControl}}
+        const getCustomFilterControls = () => this._customFilterControls;
+        this.Handlebars.registerHelper("isCustomFilterControl", function (this: unknown, filter: any, options: any) {
+            const isCustom = !!TemplateService.getFilterControlDefinition(filter, getCustomFilterControls());
+            return isCustom ? options.fn(this) : options.inverse(this);
+        });
+
+        // Renders the custom filter control registered for a filter, optionally prefixed by the
+        // builtin AND/OR operator control when the control opted in for it.
+        this.Handlebars.registerHelper("customFilterControl", (filter: any, instanceId: string, theme: any, selectedFilters: any) => {
+
+            const definition = TemplateService.getFilterControlDefinition(filter, this._customFilterControls);
+
+            if (!definition) {
+                return "";
+            }
+
+            const serializedTheme = escapeFn(JSON.stringify(theme));
+
+            const operatorMarkup = definition.showOperator && filter.isMulti ? `
+                <div class="filter--option">
+                    <pnp-filteroperator
+                        data-instance-id="${escapeFn(instanceId)}"
+                        data-filter-name="${escapeFn(filter.filterName)}"
+                        data-operator="${escapeFn(filter.operator)}"
+                        data-theme-variant="${serializedTheme}"
+                    ></pnp-filteroperator>
+                </div>
+            ` : "";
+
+            const componentName = escapeFn(definition.componentName);
+
+            return new hb.SafeString(`
+                ${operatorMarkup}
+                <div class="filter--value">
+                    <${componentName}
+                        data-instance-id="${escapeFn(instanceId)}"
+                        data-filter-name="${escapeFn(filter.filterName)}"
+                        data-filter="${escapeFn(JSON.stringify(filter))}"
+                        data-selected-filters="${escapeFn(JSON.stringify(selectedFilters))}"
+                        data-is-multi="${filter.isMulti ? 'true' : 'false'}"
+                        data-show-count="${filter.showCount ? 'true' : 'false'}"
+                        data-operator="${escapeFn(filter.operator)}"
+                        data-theme-variant="${serializedTheme}"
+                    ></${componentName}>
+                </div>
+            `);
+        });
+
+        // Renders the builtin 'Apply'/'Clear' buttons for a custom filter control which opted in for them.
+        this.Handlebars.registerHelper("customFilterControlFooter", (filter: any, instanceId: string, theme: any) => {
+
+            const definition = TemplateService.getFilterControlDefinition(filter, this._customFilterControls);
+
+            if (!definition || !definition.showApplyButtons || !filter.isMulti) {
+                return "";
+            }
+
+            return new hb.SafeString(`
+                <pnp-filtermultiselect
+                    data-instance-id="${escapeFn(instanceId)}"
+                    data-filter-name="${escapeFn(filter.filterName)}"
+                    data-apply-disabled="${filter.canApply ? 'false' : 'true'}"
+                    data-clear-disabled="${filter.canClear ? 'false' : 'true'}"
+                    data-theme-variant="${escapeFn(JSON.stringify(theme))}"
+                >
+                </pnp-filtermultiselect>
+            `);
+        });
+    }
+
+    /**
+     * Resolves the custom filter control definition matching the template selected for a filter, if any.
+     */
+    private static getFilterControlDefinition(filter: any, customFilterControls: IFilterControlDefinition[]): IFilterControlDefinition {
+
+        if (!filter || !filter.selectedTemplate || !customFilterControls || customFilterControls.length === 0) {
+            return undefined;
+        }
+
+        return customFilterControls.filter(control => control && control.key === filter.selectedTemplate && control.componentName)[0];
     }
 
     private async _initAdaptiveCardsResources(): Promise<void> {

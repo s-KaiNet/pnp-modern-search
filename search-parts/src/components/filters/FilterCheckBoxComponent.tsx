@@ -1,8 +1,11 @@
 import * as React from 'react';
 import { BaseWebComponent, IDataFilterInfo, IDataFilterValueInfo, ExtensibilityConstants } from '@pnp/modern-search-extensibility';
 import * as ReactDOM from 'react-dom';
-import { Checkbox, ChoiceGroup, IChoiceGroupOption, IStyleFunctionOrObject, ITextProps, ITextStyles, ITheme, Text } from '@fluentui/react';
+import { Checkbox, ChoiceGroup, ICheckboxProps, IChoiceGroupOption, ITheme, Text, getTheme } from '@fluentui/react';
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
+import { TaxonomyHelper } from '../../helpers/TaxonomyHelper';
+import { ThemeVariantHelper } from '../../helpers/ThemeVariantHelper';
+import { BusyCursorHelper } from '../../helpers/BusyCursorHelper';
 
 export interface IFilterCheckBoxProps {
 
@@ -47,6 +50,19 @@ export interface IFilterCheckBoxProps {
     isMulti?: boolean;
 
     /**
+     * The total number of values in the parent filter. Used for the `aria-setsize`
+     * attribute so screen readers announce single-select radios as "x of y" instead
+     * of "1 of 1" (each value is rendered as its own web component).
+     */
+    valueCount?: number;
+
+    /**
+     * The 0-based index of this value within the parent filter. Used to compute the
+     * 1-based `aria-posinset` attribute (see `valueCount`).
+     */
+    valueIndex?: number;
+
+    /**
      * The current theme settings
      */
     themeVariant?: IReadonlyTheme;
@@ -62,6 +78,57 @@ export interface IFilterCheckBoxState {
 
 export class FilterCheckBoxComponent extends React.Component<IFilterCheckBoxProps, IFilterCheckBoxState> {
 
+    private readonly _rootRef: React.RefObject<HTMLDivElement> = React.createRef();
+
+    private _getTextColor(): string {
+        if (this.props.themeVariant?.isInverted) {
+            return this.props.themeVariant?.semanticColors?.bodyText ?? '#323130';
+        }
+
+        return this.props.themeVariant?.semanticColors?.inputText ?? '#323130';
+    }
+
+    private readonly _renderCheckboxLabel = (props?: ICheckboxProps): JSX.Element => {
+        const checkboxLabel = `${props?.label ?? ''}`;
+        return <Text block nowrap styles={{ root: { color: this._getTextColor() } }} title={checkboxLabel}>{checkboxLabel}</Text>;
+    }
+
+    public componentDidMount(): void {
+        this._applyRadioSetSizeAria();
+    }
+
+    public componentDidUpdate(): void {
+        this._applyRadioSetSizeAria();
+    }
+
+    /**
+     * For single-select filters each value renders its own single-option `ChoiceGroup`, which emits a
+     * `radiogroup` containing a single radio with a unique `name` attribute. Screen readers therefore
+     * announce every value as "1 of 1" because native radios are positioned relative to other radios
+     * sharing the same `name` (and `aria-setsize` is ignored for native radios in most SRs).
+     *
+     * To make the value announce its real position within the filter we (1) neutralize the inner
+     * per-value `radiogroup` role, (2) give every value radio of the same filter a shared, stable
+     * `name` so the browser/SR treats them as one radio set, and (3) set explicit
+     * `aria-setsize`/`aria-posinset` as a fallback for SRs that honor them.
+     */
+    private _applyRadioSetSizeAria(): void {
+        if (this.props.isMulti || !this._rootRef.current || !this.props.valueCount || this.props.valueIndex === undefined || this.props.valueIndex === null) {
+            return;
+        }
+        const radioGroup = this._rootRef.current.querySelector('[role="radiogroup"]');
+        if (radioGroup) {
+            radioGroup.setAttribute('role', 'presentation');
+        }
+        const radioInput = this._rootRef.current.querySelector('input[type="radio"]');
+        if (radioInput) {
+            const sharedName = `pnp-filter-${this.props.instanceId || ''}-${this.props.filterName || ''}`;
+            radioInput.setAttribute('name', sharedName);
+            radioInput.setAttribute('aria-setsize', this.props.valueCount.toString());
+            radioInput.setAttribute('aria-posinset', (this.props.valueIndex + 1).toString());
+        }
+    }
+
     public render() {
 
         let filterValue: IDataFilterValueInfo = {
@@ -69,19 +136,13 @@ export class FilterCheckBoxComponent extends React.Component<IFilterCheckBoxProp
             value: this.props.value,
             selected: this.props.selected
         };
+        const safeFilterValue = `${filterValue.value ?? ''}`;
+        const safeFilterName = `${this.props.filterName ?? ''}`;
 
         let renderInput: JSX.Element = null;
-        let textColor: string = this.props.themeVariant && this.props.themeVariant.isInverted ? (this.props.themeVariant ? this.props.themeVariant.semanticColors.bodyText : '#323130') : this.props.themeVariant.semanticColors.inputText;
-        const textComponentStyles: IStyleFunctionOrObject<ITextProps, ITextStyles> = {
-            root: {
-                color: textColor
-            }
-        };
-
-        let labelValue = filterValue.name;
-        if (filterValue.name.toString().indexOf("i:0#") > -1) {
-            labelValue = filterValue.name.toString().split("|")[1] + "(" + filterValue.name.toString().split("|")[0] + ")";
-        }
+        const textColor = this._getTextColor();
+        const rawLabelValue = `${filterValue.name ?? filterValue.value ?? ''}`;
+        const labelValue = TaxonomyHelper.resolveDisplayLabel(rawLabelValue);
 
 
         if (this.props.isMulti) {
@@ -94,27 +155,27 @@ export class FilterCheckBoxComponent extends React.Component<IFilterCheckBoxProp
                         width: '100%'
                     },
                     text: {
-                        color: this.props.count && this.props.count === 0 ? this.props.themeVariant.semanticColors.disabledText : textColor
+                        color: this.props.count && this.props.count === 0 ? this.props.themeVariant?.semanticColors?.disabledText ?? '#a19f9d' : textColor
                     }
                 }}
-                theme={this.props.themeVariant as ITheme}
+                theme={(this.props.themeVariant as ITheme) || getTheme()}
                 defaultChecked={this.props.selected}
                 disabled={this.props.disabled}
-                title={filterValue.name}
+                title={labelValue}
                 label={labelValue}
 
 
                 onChange={(ev, checked: boolean) => {
+                    BusyCursorHelper.setImmediateProgressCursor();
                     filterValue.selected = checked;
+                    filterValue.name = labelValue;
                     this.props.onChecked(this.props.filterName, filterValue);
                 }}
-                onRenderLabel={(props, defaultRender) => {
-                    return <Text block nowrap styles={textComponentStyles} title={props.label}>{props.label}</Text>;
-                }}
+                onRenderLabel={this._renderCheckboxLabel}
             />;
         } else {
             renderInput = <ChoiceGroup
-                defaultSelectedKey={this.props.selected ? filterValue.value : undefined}
+                defaultSelectedKey={this.props.selected ? safeFilterValue : undefined}
                 styles={{
                     root: {
                         position: 'relative',
@@ -130,24 +191,30 @@ export class FilterCheckBoxComponent extends React.Component<IFilterCheckBoxProp
                         }
                     }
                 }}
-                key={this.props.filterName}
+                key={safeFilterName}
                 options={[
                     {
-                        key: filterValue.value,
-                        text: filterValue.name,
+                        key: safeFilterValue,
+                        text: labelValue,
                         disabled: this.props.disabled,
                         styles: {
                             field: {
-                                color: this.props.count && this.props.count === 0 ? this.props.themeVariant.semanticColors.disabledText : textColor
+                                color: this.props.count && this.props.count === 0 ? this.props.themeVariant?.semanticColors?.disabledText ?? '#a19f9d' : textColor
                             }
                         }
                     }
                 ]}
                 onChange={(ev?: React.FormEvent<HTMLElement | HTMLInputElement>, option?: IChoiceGroupOption) => {
+                    BusyCursorHelper.setImmediateProgressCursor();
                     filterValue.selected = (ev.currentTarget as HTMLInputElement).checked;
+                    filterValue.value = safeFilterValue;
+                    filterValue.name = labelValue;
                     this.props.onChecked(this.props.filterName, filterValue);
                 }}
             />;
+
+            // Wrap so we can reach the rendered radio input and set aria-setsize/aria-posinset on it.
+            renderInput = <div ref={this._rootRef}>{renderInput}</div>;
         }
 
         return renderInput;
@@ -160,24 +227,34 @@ export class FilterCheckBoxWebComponent extends BaseWebComponent {
         super();
     }
 
-    public async connectedCallback() {
+    public connectedCallback() {
 
         let props = this.resolveAttributes();
-        const checkBox = <FilterCheckBoxComponent {...props} onChecked={((filterName: string, filterValue: IDataFilterValueInfo) => {
+        const checkBox = <FilterCheckBoxComponent {...props} onChecked={(filterName: string, filterValue: IDataFilterValueInfo) => {
             // Bubble event through the DOM
+            const detail: IDataFilterInfo = {
+                filterName: filterName,
+                filterValues: [filterValue],
+                instanceId: props.instanceId
+            };
             this.dispatchEvent(new CustomEvent(ExtensibilityConstants.EVENT_FILTER_UPDATED, {
-                detail: {
-                    filterName: filterName,
-                    filterValues: [filterValue],
-                    instanceId: props.instanceId
-                } as IDataFilterInfo,
+                detail,
                 bubbles: true,
                 cancelable: true
             }));
-        }).bind(this)}
+        }}
         />;
 
         ReactDOM.render(checkBox, this);
+    }
+
+    /**
+     * Serializing the theme on every single value is what made large refiners unusable, so
+     * templates can set it once on an enclosing element (ex: `pnp-collapsible` or the values
+     * list) and let every value resolve it from there.
+     */
+    protected getThemeVariant(): IReadonlyTheme {
+        return ThemeVariantHelper.resolveFromAncestors(this);
     }
 
     protected onDispose(): void {

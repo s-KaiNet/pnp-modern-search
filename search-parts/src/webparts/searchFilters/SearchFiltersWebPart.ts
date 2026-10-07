@@ -14,12 +14,11 @@ import {
     PropertyPaneButton,
     PropertyPaneButtonType
 } from '@microsoft/sp-property-pane';
-import { PropertyFieldColorPicker, PropertyFieldColorPickerStyle } from '@pnp/spfx-property-controls/lib/PropertyFieldColorPicker';
 import { DynamicProperty } from '@microsoft/sp-component-base';
 import { IPropertyPanePage } from '@microsoft/sp-property-pane';
 import * as webPartStrings from 'SearchFiltersWebPartStrings';
 import * as commonStrings from 'CommonStrings';
-import SearchFilters from './components/SearchFiltersContainer';
+const SearchFilters = React.lazy(() => import(/* webpackChunkName: 'pnp-modern-search-filters-container' */ './components/SearchFiltersContainer'));
 import { ISearchFiltersContainerProps } from './components/ISearchFiltersContainerProps';
 import ISearchFiltersWebPartProps from './ISearchFiltersWebPartProps';
 import IDynamicDataService from '../../services/dynamicDataService/IDynamicDataService';
@@ -28,7 +27,7 @@ import { DynamicDataService } from '../../services/dynamicDataService/DynamicDat
 import { IDynamicDataCallables, IDynamicDataPropertyDefinition } from '@microsoft/sp-dynamic-data';
 import { ComponentType } from '../../common/ComponentType';
 import { IDataFilterSourceData } from '../../models/dynamicData/IDataFilterSourceData';
-import { IDataFilter, ILayoutDefinition, LayoutType, ILayout, FilterConditionOperator, IDataFilterResult, IDataFilterConfiguration, FilterType, IDataFilterResultValue, IComponentDefinition, FilterSortType, FilterSortDirection } from '@pnp/modern-search-extensibility';
+import { IDataFilter, ILayoutDefinition, LayoutType, ILayout, FilterConditionOperator, IDataFilterResult, IDataFilterConfiguration, FilterType, IDataFilterResultValue, IComponentDefinition, FilterSortType, FilterSortDirection, IExtensibilityLibrary, IFilterControlDefinition } from '@pnp/modern-search-extensibility';
 import { AsyncCombo } from '../../controls/PropertyPaneAsyncCombo/components/AsyncCombo';
 import { IAsyncComboProps } from '../../controls/PropertyPaneAsyncCombo/components/IAsyncComboProps';
 import { AvailableLayouts, BuiltinLayoutsKeys } from '../../layouts/AvailableLayouts';
@@ -38,7 +37,6 @@ import { FileFormat, ITemplateService } from '../../services/templateService/ITe
 import { isEmpty, isEqual, uniqBy, cloneDeep, uniq, sortBy } from '@microsoft/sp-lodash-subset';
 import { BuiltinFilterTemplates, BuiltinFilterTypes } from '../../layouts/AvailableTemplates';
 import { ServiceScope } from '@microsoft/sp-core-library';
-import { AvailableComponents } from '../../components/AvailableComponents';
 import { PropertyPaneAsyncCombo } from '../../controls/PropertyPaneAsyncCombo/PropertyPaneAsyncCombo';
 import { BaseWebPart } from '../../common/BaseWebPart';
 import commonStyles from '../../styles/Common.module.scss';
@@ -52,6 +50,13 @@ import { ITaxonomyService } from '../../services/taxonomyService/ITaxonomyServic
 import { TaxonomyService } from '../../services/taxonomyService/TaxonomyService';
 import { Dropdown, IDropdownOption, IDropdownProps } from '@fluentui/react/lib/Dropdown';
 import { TextField } from '@fluentui/react/lib/TextField';
+import { Toggle, IToggleProps } from '@fluentui/react/lib/Toggle';
+import { IExtensibilityConfiguration } from '../../models/common/IExtensibilityConfiguration';
+import { ExtensibilityUsageHelper } from '../../helpers/ExtensibilityUsageHelper';
+import { FilterControlHelper } from '../../helpers/FilterControlHelper';
+import { Constants } from '../../common/Constants';
+import { ExtensibilityConfigurationHelper } from '../../helpers/ExtensibilityConfigurationHelper';
+import { HandlebarsCustomizationTracker } from '../../helpers/HandlebarsCustomizationTracker';
 
 const LogSource = "SearchFiltersWebPart";
 
@@ -59,6 +64,17 @@ interface IHierarchicalFilterConfiguration extends IDataFilterConfiguration {
     termSetId?: string;
     termGroupId?: string;
     cacheDuration?: number;
+    hideNodesNotInDataSet?: boolean;
+    expandAllNodesByDefault?: boolean;
+    showLimitExceededWarning?: boolean;
+}
+
+interface IFilterResultWithLimitInfo extends IDataFilterResult {
+    isMaxBucketsExceeded?: boolean;
+    configuredMaxBuckets?: number;
+    returnedValueCount?: number;
+    isEditModeCapApplied?: boolean;
+    isAwaitingResultSignals?: boolean;
 }
 
 /**
@@ -79,6 +95,34 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
     private _dataSourceDynamicProperties: DynamicProperty<IDataResultSourceData>[] = [];
     private _verticalsSourceData: DynamicProperty<IDataVerticalSourceData>;
     private _selectedFilters: IDataFilter[] = [];
+    private _lastSelectedVerticalKey: string = undefined;
+    private _verticalChangeVersion: number = 0;
+
+    private _resetFiltersForChangedVertical(): boolean {
+        const verticalData = DynamicPropertyHelper.tryGetValueSafe(this._verticalsSourceData);
+        const selectedVerticalKey = verticalData?.selectedVertical?.key;
+
+        if (verticalData?.clearFiltersOnVerticalChange === true && selectedVerticalKey && this._lastSelectedVerticalKey && this._lastSelectedVerticalKey !== selectedVerticalKey) {
+            this._selectedFilters = [];
+            this._verticalChangeVersion++;
+            this._lastSelectedVerticalKey = selectedVerticalKey;
+            return true;
+        }
+
+        if (selectedVerticalKey) {
+            this._lastSelectedVerticalKey = selectedVerticalKey;
+        }
+
+        return false;
+    }
+
+    private _onVerticalsDataChanged = (): void => {
+        if (this._resetFiltersForChangedVertical()) {
+            this.context.dynamicDataSourceManager.notifyPropertyChanged(ComponentType.SearchFilters);
+        }
+
+        this.render();
+    };
 
     /**
      * Dynamically loaded components for property pane
@@ -89,6 +133,7 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
     private _propertyFieldCodeEditorLanguages: any = null;
     private _customCollectionFieldType: any = null;
     private _propertyPanePropertyEditor = null;
+    private _propertyPaneWebPartInformation: any = null;
 
     /**
      * Properties to avoid to recreate instances every render
@@ -104,6 +149,12 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
      * The template content to display
      */
     private templateContentToDisplay: string;
+
+    /**
+     * The error message to display when the Web Part configuration can't be resolved (ex: a custom layout
+     * coming from an extensibility library which is not available anymore)
+     */
+    private errorMessage: string;
 
     /**
      * The template service instance
@@ -133,7 +184,21 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
     /**
      * The available web component definitions (not registered yet)
      */
-    private availableWebComponentDefinitions: IComponentDefinition<any>[] = AvailableComponents.BuiltinComponents;
+    private availableWebComponentDefinitions: IComponentDefinition<any>[] = [];
+
+    /**
+     * The custom filter control definitions coming from the registered extensibility libraries
+     */
+    private availableFilterControlDefinitions: IFilterControlDefinition[] = [];
+
+    /** Stable identity of the effective own/inherited extensibility configuration. */
+    private loadedExtensibilityConfigurationKey: string;
+
+    /** Prevents concurrent reloads when dynamic-data callbacks re-enter render. */
+    private extensionsLoadingPromise: Promise<void>;
+
+    /** Restores helpers/partials when the effective library configuration changes. */
+    private readonly handlebarsCustomizationTracker = new HandlebarsCustomizationTracker();
 
     /**
      * The available connections as property pane fields
@@ -145,6 +210,14 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
      */
     private readonly groupedTermSets: Map<string, Array<{ id: string, name: string, groupId: string, groupName: string }>> = new Map();
     private readonly hierarchicalSettingsUiStateByItemId: Map<string, IHierarchicalSettingsUiState> = new Map();
+
+    /**
+     * Tracks whether the Web Part has been disposed. Async callbacks (dynamic data 'available sources
+     * changed', theme change, etc.) may resolve after the instance is torn down; rendering then
+     * crashes because 'this.context' is no longer available (`Cannot read properties of undefined
+     * (reading 'propertyPane')`). This flag lets render() bail out safely.
+     */
+    private _webPartDisposed: boolean = false;
 
     constructor() {
         super();
@@ -229,15 +302,22 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
         // That's why we need to fetch the licence info before calling this method
         this.ensureDynamicDataSourcesConnection();
 
-        // Register Web Components in the global page context. We need to do this BEFORE the template processing to avoid race condition.
-        // Web components are only defined once.
-        // We need to register components here in the case where the Search Results WP is not present on the page
-        await this.templateService.registerWebComponents(this.availableWebComponentDefinitions, this.instanceId);
+        // Load extensions from the registered extensibility libraries (custom layouts, filter controls,
+        // web components and Handlebars customizations). This must happen BEFORE the web components get
+        // registered so custom components are part of the same registration pass.
+        await this.ensureExtensionsLoaded();
 
         return super.onInit();
     }
 
     public async render(): Promise<void> {
+
+        // The Web Part may have been disposed while an async callback (dynamic data 'available sources
+        // changed', theme change, ...) was in flight. Rendering a disposed instance crashes because
+        // 'this.context' is no longer available (e.g. reading 'propertyPane'), so bail out early.
+        if (this._webPartDisposed) {
+            return;
+        }
 
         // Check audience targeting - if user is not in audience, don't render
         const isInAudience = await this.isInAudience();
@@ -249,17 +329,48 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
             return this.renderCompleted();
         }
 
-        // Determine the template content to display
-        // In the case of an external template is selected, the render is done asynchronously waiting for the content to be fetched
-        await this.initTemplate();
+        // Reset the error message every time
+        this.errorMessage = undefined;
 
-        // Get and initialize layout instance if different (i.e avoid to create a new instance every time)
-        if (this.lastLayoutKey !== this.properties.selectedLayoutKey) {
-            this.layout = await LayoutHelper.getLayoutInstance(this.webPartInstanceServiceScope, this.context, this.properties, this.properties.selectedLayoutKey, this.availableLayoutDefinitions, this.displayMode);
-            this.lastLayoutKey = this.properties.selectedLayoutKey;
+        try {
+
+            // A connected Search Results Web Part may become available after this Web Part initialized.
+            // Re-resolve the effective configuration so legacy pages can inherit its libraries.
+            await this.ensureExtensionsLoaded();
+
+            // Determine the template content to display
+            // In the case of an external template is selected, the render is done asynchronously waiting for the content to be fetched
+            await this.initTemplate();
+
+            // Re-check disposal after the awaited audience/template work before resolving the layout
+            // instance, which uses this.context (torn down on dispose).
+            if (this._webPartDisposed || !this.context) {
+                return;
+            }
+
+            // Get and initialize layout instance if different (i.e avoid to create a new instance every time)
+            if (this.lastLayoutKey !== this.properties.selectedLayoutKey) {
+                this.layout = await LayoutHelper.getLayoutInstance(this.webPartInstanceServiceScope, this.context, this.properties, this.properties.selectedLayoutKey, this.availableLayoutDefinitions, this.displayMode);
+                this.lastLayoutKey = this.properties.selectedLayoutKey;
+            }
+
+        } catch (error) {
+            // Catch instanciation or wrong definition errors for extensibility scenarios
+            this.errorMessage = error.message ? error.message : error;
         }
 
-        // Refresh the property pane to get layout and data source options
+        if (this._webPartDisposed || !this.context) {
+            return;
+        }
+
+        // Refresh the property pane to get layout and data source options.
+        // Re-check disposal here: the awaits above (audience, template, layout) yield control, and the
+        // instance can be disposed in the meantime (e.g. another Web Part's source change races with
+        // removal in edit mode), leaving 'this.context' undefined when this code resumes.
+        if (this._webPartDisposed || !this.context) {
+            return;
+        }
+
         if (this.context.propertyPane.isPropertyPaneOpen()) {
             this.context.propertyPane.refresh();
         }
@@ -278,8 +389,22 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
         let renderRootElement: JSX.Element = null;
         let filterResults: IDataFilterResult[] = [];
 
-        // Display the Web Part only if a valid configuration is set
-        if (this.templateContentToDisplay && this.properties.filtersConfiguration.length > 0) {
+        // An extensibility error (ex: a custom layout coming from a library which is not deployed anymore)
+        // prevents any rendering, so surface it instead of silently displaying nothing.
+        if (this.errorMessage) {
+
+            renderRootElement = React.createElement(
+                MessageBar,
+                { messageBarType: MessageBarType.error },
+                this.errorMessage
+            );
+
+        } else if (this.templateContentToDisplay && this.properties.filtersConfiguration.length > 0) {
+            // Display the Web Part only if a valid configuration is set
+
+            // The options a custom filter control doesn't support are only disabled in the property pane, so render
+            // the filters from the normalized configuration to always use the effective values of the control
+            const resolvedFiltersConfiguration = this.getResolvedFiltersConfiguration();
 
             // Get data from connected sources
             if (this._dataSourceDynamicProperties.length > 0) {
@@ -295,42 +420,48 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
             // OR the data results don't contain this filter name. 
             // We create fake entries for those filters to be able to render them in the template
             // We do this by convenience to avoid refactoring the Handlebars templates
-            filterResults = this._initStaticFilters(filterResults, this.properties.filtersConfiguration);
+            const isResultsLoading = this._dataSourceDynamicProperties.some(dynamicProperty => Boolean(DynamicPropertyHelper.tryGetValueSafe(dynamicProperty)?.isLoading));
+            filterResults = this._initStaticFilters(filterResults, resolvedFiltersConfiguration, isResultsLoading);
 
             renderRootElement = React.createElement(
-                SearchFilters,
-                {
-                    templateContent: this.templateContentToDisplay,
-                    availableFilters: filterResults,
-                    filtersConfiguration: this.properties.filtersConfiguration,
-                    domElement: this.domElement,
-                    instanceId: this.instanceId,
-                    selectedLayoutKey: this.properties.selectedLayoutKey,
-                    properties: JSON.parse(JSON.stringify(this.properties)),
-                    themeVariant: this._themeVariant,
-                    context: this.context,
-                    onUpdateFilters: (updatedFilters: IDataFilter[]) => {
+                React.Suspense,
+                { fallback: null },
+                React.createElement(
+                    SearchFilters,
+                    {
+                        templateContent: this.templateContentToDisplay,
+                        availableFilters: filterResults,
+                        filtersConfiguration: resolvedFiltersConfiguration,
+                        domElement: this.domElement,
+                        instanceId: this.instanceId,
+                        selectedLayoutKey: this.properties.selectedLayoutKey,
+                        verticalChangeVersion: this._verticalChangeVersion,
+                        properties: JSON.parse(JSON.stringify({ ...this.properties, filtersConfiguration: resolvedFiltersConfiguration })),
+                        themeVariant: this._themeVariant,
+                        context: this.context,
+                        onUpdateFilters: (updatedFilters: IDataFilter[]) => {
 
-                        this._selectedFilters = updatedFilters;
+                            this._selectedFilters = updatedFilters;
 
-                        // Notfify dynamic data consumers data have changed
-                        this.context.dynamicDataSourceManager.notifyPropertyChanged(ComponentType.SearchFilters);
-                    },
-                    templateService: this.templateService,
-                    taxonomyService: this.taxonomyService,
-                    webPartTitleProps: {
-                        displayMode: this.displayMode,
-                        title: this.properties.title,
-                        updateProperty: this._updateTitleProperty,
-                        className: commonStyles.wpTitle
-                    },
-                    filterBackgroundColor: this.properties.filterBackgroundColor,
-                    filterBorderColor: this.properties.filterBorderColor,
-                    filterBorderThickness: this.properties.filterBorderThickness,
-                    titleFont: this.properties.titleFont,
-                    titleFontSize: this.properties.titleFontSize,
-                    titleFontColor: this.properties.titleFontColor
-                } as ISearchFiltersContainerProps
+                            // Notify dynamic data consumers data have changed
+                            this.context.dynamicDataSourceManager.notifyPropertyChanged(ComponentType.SearchFilters);
+                        },
+                        templateService: this.templateService,
+                        taxonomyService: this.taxonomyService,
+                        webPartTitleProps: {
+                            displayMode: this.displayMode,
+                            title: this.properties.title,
+                            updateProperty: this._updateTitleProperty,
+                            className: commonStyles.wpTitle
+                        },
+                        filterBackgroundColor: this.properties.filterBackgroundColor,
+                        filterBorderColor: this.properties.filterBorderColor,
+                        filterBorderThickness: this.properties.filterBorderThickness,
+                        titleFont: this.properties.titleFont,
+                        titleFontSize: this.properties.titleFontSize,
+                        titleFontColor: this.properties.titleFontColor
+                    } as ISearchFiltersContainerProps
+                )
             );
 
         } else {
@@ -424,17 +555,29 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
 
         switch (propertyId) {
 
-            case propertyId:
+            case ComponentType.SearchFilters:
+                this._resetFiltersForChangedVertical();
                 return {
-                    filterConfiguration: this.properties.filtersConfiguration,
+                    filterConfiguration: this.getResolvedFiltersConfiguration(),
                     selectedFilters: this._selectedFilters,
                     filterOperator: this.properties.filterOperator,
-                    instanceId: this.instanceId
+                    instanceId: this.instanceId,
+                    connectedResultsSourceReferences: this.properties.dataResultsDataSourceReferences
                 } as IDataFilterSourceData;
 
             default:
                 throw new Error('Bad property id');
         }
+    }
+
+    /**
+     * Returns the effective filters configuration, resolving the filter type of the filters using a custom filter
+     * control and resetting the options their control doesn't support. Connected data sources don't know about the
+     * custom controls registered here, so they rely on the filter type to skip refiners/aggregations for static
+     * filters, and on the normalized options to not apply settings the selected control opted out from.
+     */
+    private getResolvedFiltersConfiguration(): IDataFilterConfiguration[] {
+        return FilterControlHelper.normalizeConfigurations(this.properties.filtersConfiguration, this.availableFilterControlDefinitions);
     }
 
     public onCustomPropertyUpdate(propertyPath: string, newValue: any, changeCallback?: (targetProperty?: string, newValue?: any) => void): void {
@@ -446,6 +589,7 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
     }
 
     protected onDispose(): void {
+        this._webPartDisposed = true;
         this.hierarchicalSettingsUiStateByItemId.clear();
         // eslint-disable-next-line @rushstack/pair-react-dom-render-unmount -- paired with render in renderCompleted
         ReactDom.unmountComponentAtNode(this.domElement);
@@ -487,6 +631,10 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                     ...this.getPropertyPaneWebPartInfoGroups(),
                     this.getAudienceTargetingPropertyPaneGroup(),
                     {
+                        groupName: commonStrings.PropertyPane.InformationPage.Extensibility.GroupName,
+                        groupFields: this.getExtensibilityFields()
+                    },
+                    {
                         groupName: commonStrings.PropertyPane.InformationPage.ImportExport,
                         groupFields: [this._propertyPanePropertyEditor({
                             webpart: this,
@@ -505,6 +653,10 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
     protected async onPropertyPaneConfigurationStart() {
         await this.loadPropertyPaneResources();
 
+        // Force the load of the enabled libraries so custom layouts and filter controls are selectable
+        // in the property pane, even if the current configuration doesn't use anything custom yet.
+        await this.ensureExtensionsLoaded(true);
+
         if (this.groupedTermSets.size === 0) {
             await this._loadTermSets();
         }
@@ -519,11 +671,21 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
 
             // Set correct default values according to the template
             const nextConfigurations = newValue as IHierarchicalFilterConfiguration[];
-            this.properties.filtersConfiguration = nextConfigurations.map(configuration => {
+            this.properties.filtersConfiguration = nextConfigurations.map(nextConfiguration => {
+
+                // The options unsupported by a custom filter control are disabled in the property pane, but a value
+                // configured before selecting the control could still be persisted, so reset them here as well
+                const configuration = FilterControlHelper.normalizeConfiguration(nextConfiguration, this.availableFilterControlDefinitions);
+
                 if (configuration.selectedTemplate === BuiltinFilterTemplates.DateRange
                     || configuration.selectedTemplate === BuiltinFilterTemplates.DateInterval) {
                     configuration.isMulti = false;
                     configuration.operator = FilterConditionOperator.AND;
+                }
+
+                if (configuration.selectedTemplate === BuiltinFilterTemplates.StaticPeople) {
+                    configuration.maxBuckets = undefined;
+                    configuration.showLimitExceededWarning = false;
                 }
 
                 // Preserve hierarchical settings set through custom fields.
@@ -532,6 +694,8 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                     configuration.termSetId = correspondingNewConfig.termSetId;
                     configuration.termGroupId = correspondingNewConfig.termGroupId;
                     configuration.cacheDuration = correspondingNewConfig.cacheDuration;
+                    configuration.hideNodesNotInDataSet = correspondingNewConfig.hideNodesNotInDataSet;
+                    configuration.expandAllNodesByDefault = correspondingNewConfig.expandAllNodesByDefault;
                 }
 
                 return configuration;
@@ -584,6 +748,19 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
             }
         }
 
+        if (propertyPath.localeCompare('extensibilityLibraryConfiguration') === 0) {
+
+            // Remove duplicates if any
+            this.properties.extensibilityLibraryConfiguration = uniqBy(this.properties.extensibilityLibraryConfiguration, 'id');
+
+            await this.ensureExtensionsLoaded(true);
+
+            // The selected layout may come from a library which is not loaded anymore
+            if (this.availableLayoutDefinitions.filter(layout => layout.key === this.properties.selectedLayoutKey).length === 0) {
+                this.properties.selectedLayoutKey = BuiltinLayoutsKeys.Vertical;
+            }
+        }
+
         // Refresh list of available connections
         this.propertyPaneConnectionsFields = await this.getConnectionOptionsFields();
         this.context.propertyPane.refresh();
@@ -611,7 +788,7 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
             }
         });
 
-        return [
+        const fields: IPropertyPaneField<any>[] = [
             new PropertyPaneAsyncCombo('dataResultsDataSourceReferences', {
                 availableOptions: sourceOptions,
                 allowFreeform: false,
@@ -632,6 +809,35 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                 allowMultiSelect: true
             }),
         ];
+
+        // Check bidirectional connection: do the connected results web parts also connect back to this filter web part?
+        if (this.properties.dataResultsDataSourceReferences.length > 0 && this._dataSourceDynamicProperties.length > 0) {
+            let hasMissingBackConnection = false;
+
+            this._dataSourceDynamicProperties.forEach((dynProp) => {
+                const resultData: IDataResultSourceData = DynamicPropertyHelper.tryGetValueSafe(dynProp);
+                if (resultData) {
+                    // Extract sourceId from the reference (format: "sourceId:propertyId") and check if it ends with this web part's instanceId
+                    const connectedRef = resultData.connectedFilterSourceReference;
+                    const isConnectedBack = connectedRef &&
+                        connectedRef.split(':')[0].endsWith(this.instanceId);
+                    if (!isConnectedBack) {
+                        hasMissingBackConnection = true;
+                    }
+                }
+            });
+
+            if (hasMissingBackConnection && this._propertyPaneWebPartInformation) {
+                fields.push(
+                    this._propertyPaneWebPartInformation({
+                        description: `<span style="color: #d83b01;">⚠ ${webPartStrings.PropertyPane.ConnectionsPage.BidirectionalConnectionWarning}</span>`,
+                        key: 'bidirectionalResultsWarning'
+                    })
+                );
+            }
+        }
+
+        return fields;
     }
 
     private async getConnectionOptionsFields(): Promise<IPropertyPaneField<any>[]> {
@@ -697,7 +903,7 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
             groupName: webPartStrings.Styling.StylingOptionsGroupName,
             isCollapsed: true,
             groupFields: [
-                PropertyFieldColorPicker('filterBackgroundColor', {
+                this._basePropertyFieldColorPicker('filterBackgroundColor', {
                     label: webPartStrings.Styling.FilterBackgroundColorLabel,
                     selectedColor: this.properties.filterBackgroundColor,
                     onPropertyChange: this.onPropertyPaneFieldChanged,
@@ -706,10 +912,10 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                     debounce: 1000,
                     isHidden: false,
                     alphaSliderHidden: false,
-                    style: PropertyFieldColorPickerStyle.Inline,
+                    style: this._basePropertyFieldColorPickerStyle.Inline,
                     key: 'filterBackgroundColorFieldId'
                 }),
-                PropertyFieldColorPicker('filterBorderColor', {
+                this._basePropertyFieldColorPicker('filterBorderColor', {
                     label: webPartStrings.Styling.FilterBorderColorLabel,
                     selectedColor: this.properties.filterBorderColor,
                     onPropertyChange: this.onPropertyPaneFieldChanged,
@@ -718,7 +924,7 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                     debounce: 1000,
                     isHidden: false,
                     alphaSliderHidden: false,
-                    style: PropertyFieldColorPickerStyle.Inline,
+                    style: this._basePropertyFieldColorPickerStyle.Inline,
                     key: 'filterBorderColorFieldId'
                 }),
                 PropertyPaneSlider('filterBorderThickness', {
@@ -751,6 +957,14 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
         }
 
         return groups;
+    }
+
+    /**
+     * Determines if a filters configuration option is supported by the control selected for a filter.
+     * Builtin controls always support all options, custom controls can opt out from the ones they don't use.
+     */
+    private supportsFilterOption(selectedTemplate: string, option: 'multiValues' | 'valuesCount' | 'maxBuckets'): boolean {
+        return FilterControlHelper.supportsOption(selectedTemplate, this.availableFilterControlDefinitions, option);
     }
 
     /**
@@ -853,12 +1067,30 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                                 key: `${field.id}-${itemId}`,
                                 type: 'number',
                                 value: value ? value.toString() : '',
+                                disabled: item.selectedTemplate === BuiltinFilterTemplates.StaticPeople || !this.supportsFilterOption(item.selectedTemplate, 'maxBuckets'),
                                 errorMessage: errorMessage,
                                 onChange: (ev, newValue) => {
                                     const parsedValue = newValue && newValue.trim() !== '' ? parseInt(newValue, 10) : undefined;
                                     onUpdate(field.id, parsedValue);
                                 }
                             });
+                        }
+                    },
+                    {
+                        id: 'showLimitExceededWarning',
+                        title: webPartStrings.PropertyPane.DataFilterCollection.FilterLimitReachedWarningToggle,
+                        type: this._customCollectionFieldType.custom,
+                        defaultValue: false,
+                        onCustomRender: (field, value, onUpdate, item: IHierarchicalFilterConfiguration, itemId) => {
+                            return React.createElement("div", { key: `${field.id}-${itemId}` },
+                                React.createElement(Checkbox, {
+                                    defaultChecked: item.showLimitExceededWarning ?? false,
+                                    disabled: item.selectedTemplate === BuiltinFilterTemplates.DateRange || item.selectedTemplate === BuiltinFilterTemplates.DateInterval || item.selectedTemplate === BuiltinFilterTemplates.StaticPeople || !this.supportsFilterOption(item.selectedTemplate, 'maxBuckets'),
+                                    onChange: (ev, checked: boolean) => {
+                                        onUpdate(field.id, checked);
+                                    }
+                                })
+                            );
                         }
                     },
                     {
@@ -884,13 +1116,24 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                                 text: webPartStrings.PropertyPane.DataFilterCollection.Templates.PeopleTemplate
                             },
                             {
+                                key: BuiltinFilterTemplates.StaticPeople,
+                                text: webPartStrings.PropertyPane.DataFilterCollection.Templates.StaticPeopleTemplate
+                            },
+                            {
                                 key: BuiltinFilterTemplates.ComboBox,
                                 text: webPartStrings.PropertyPane.DataFilterCollection.Templates.ComboBoxTemplate
                             },
                             {
                                 key: BuiltinFilterTemplates.Hierarchical,
                                 text: webPartStrings.PropertyPane.DataFilterCollection.Templates.HierarchicalFilterTemplate
-                            }
+                            },
+                            // Filter controls coming from the registered extensibility libraries
+                            ...this.availableFilterControlDefinitions.map(control => {
+                                return {
+                                    key: control.key,
+                                    text: control.name ? control.name : control.key
+                                };
+                            })
                         ]
                     },
 
@@ -919,8 +1162,8 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                         onCustomRender: (field, value, onUpdate, item: IDataFilterConfiguration, itemId) => {
                             return React.createElement("div", { key: `${field.id}-${itemId}` },
                                 React.createElement(Checkbox, {
-                                    defaultChecked: item.selectedTemplate === BuiltinFilterTemplates.DateRange ? false : item.showCount,
-                                    disabled: item.selectedTemplate === BuiltinFilterTemplates.DateRange,
+                                    defaultChecked: item.selectedTemplate === BuiltinFilterTemplates.DateRange || !this.supportsFilterOption(item.selectedTemplate, 'valuesCount') ? false : item.showCount,
+                                    disabled: item.selectedTemplate === BuiltinFilterTemplates.DateRange || !this.supportsFilterOption(item.selectedTemplate, 'valuesCount'),
                                     onChange: (ev, checked: boolean) => {
                                         onUpdate(field.id, checked);
                                     }
@@ -936,8 +1179,8 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                         onCustomRender: (field, value, onUpdate, item: IDataFilterConfiguration, itemId) => {
                             return React.createElement("div", { key: `${field.id}-${itemId}` },
                                 React.createElement(Checkbox, {
-                                    defaultChecked: item.selectedTemplate === BuiltinFilterTemplates.DateRange || item.selectedTemplate === BuiltinFilterTemplates.DateInterval ? false : item.isMulti,
-                                    disabled: item.selectedTemplate === BuiltinFilterTemplates.DateRange || item.selectedTemplate === BuiltinFilterTemplates.DateInterval,
+                                    defaultChecked: item.selectedTemplate === BuiltinFilterTemplates.DateRange || item.selectedTemplate === BuiltinFilterTemplates.DateInterval || !this.supportsFilterOption(item.selectedTemplate, 'multiValues') ? false : item.isMulti,
+                                    disabled: item.selectedTemplate === BuiltinFilterTemplates.DateRange || item.selectedTemplate === BuiltinFilterTemplates.DateInterval || !this.supportsFilterOption(item.selectedTemplate, 'multiValues'),
                                     onChange: (ev, checked: boolean) => {
                                         onUpdate(field.id, checked);
                                     }
@@ -1089,6 +1332,8 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                             };
 
                             const effectiveCacheDuration = item.cacheDuration ?? 3;
+                            const hideNodesNotInDataSet = item.hideNodesNotInDataSet ?? false;
+                            const expandAllNodesByDefault = item.expandAllNodesByDefault ?? false;
 
                             if (!showModal) {
                                 return React.createElement("div", {
@@ -1111,6 +1356,14 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                                         React.createElement("div", null,
                                             React.createElement("strong", null, 'Cache Duration: '),
                                             React.createElement("span", { style: { color: '#444' } }, `${effectiveCacheDuration} days`)
+                                        ),
+                                        React.createElement("div", { style: { marginTop: '8px' } },
+                                            React.createElement("strong", null, `${webPartStrings.PropertyPane.DataFilterCollection.HideNodesNotInDataSet}: `),
+                                            React.createElement("span", { style: { color: '#444' } }, hideNodesNotInDataSet ? 'Yes' : 'No')
+                                        ),
+                                        React.createElement("div", { style: { marginTop: '8px' } },
+                                            React.createElement("strong", null, `${webPartStrings.PropertyPane.DataFilterCollection.ExpandAllNodesByDefault}: `),
+                                            React.createElement("span", { style: { color: '#444' } }, expandAllNodesByDefault ? 'Yes' : 'No')
                                         )
                                     ),
                                     React.createElement("button", {
@@ -1192,6 +1445,26 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                                                 color: '#666'
                                             }
                                         }, '✕')
+                                    ),
+
+                                    React.createElement("div", { style: { marginBottom: '20px' } },
+                                        React.createElement(Checkbox, {
+                                            checked: hideNodesNotInDataSet,
+                                            label: webPartStrings.PropertyPane.DataFilterCollection.HideNodesNotInDataSet,
+                                            onChange: (ev, checked?: boolean) => {
+                                                onUpdate('hideNodesNotInDataSet', checked ?? false);
+                                            }
+                                        })
+                                    ),
+
+                                    React.createElement("div", { style: { marginBottom: '20px' } },
+                                        React.createElement(Checkbox, {
+                                            checked: expandAllNodesByDefault,
+                                            label: webPartStrings.PropertyPane.DataFilterCollection.ExpandAllNodesByDefault,
+                                            onChange: (ev, checked?: boolean) => {
+                                                onUpdate('expandAllNodesByDefault', checked ?? false);
+                                            }
+                                        })
                                     ),
 
                                     React.createElement("div", { style: { marginBottom: '20px' } },
@@ -1516,14 +1789,25 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
      */
     private async initTemplate(): Promise<void> {
 
-        // Gets the template content according to the selected key
-        const selectedLayoutTemplateContent = this.availableLayoutDefinitions.filter(layout => { return layout.key === this.properties.selectedLayoutKey; })[0].templateContent;
+        // Gets the template content according to the selected key. The matching definition can be missing when
+        // the layout comes from an extensibility library which is not deployed or registered anymore.
+        const selectedLayoutDefinition = this.availableLayoutDefinitions.filter(layout => { return layout.key === this.properties.selectedLayoutKey; })[0];
+
+        if (!selectedLayoutDefinition) {
+            throw new Error(Text.format(commonStrings.General.Extensibility.LayoutDefinitionNotFound, this.properties.selectedLayoutKey));
+        }
+
+        const selectedLayoutTemplateContent = selectedLayoutDefinition.templateContent;
 
         if (this.properties.selectedLayoutKey === BuiltinLayoutsKeys.FiltersCustom) {
 
             if (this.properties.externalTemplateUrl) {
                 // We do not support filters as adaptive cards
-                this.templateContentToDisplay = await this.templateService.getFileContent(this.properties.externalTemplateUrl, FileFormat.Text);
+                this.templateContentToDisplay = await this.templateService.getFileContent(
+                    this.properties.externalTemplateUrl,
+                    FileFormat.Text,
+                    this.displayMode === DisplayMode.Edit
+                );
             } else {
                 this.templateContentToDisplay = this.properties.inlineTemplateContent ? this.properties.inlineTemplateContent : selectedLayoutTemplateContent;
             }
@@ -1565,6 +1849,225 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
         if (this.properties.selectedVerticalKeys === undefined) {
             this.properties.selectedVerticalKeys = [];
         }
+
+        // Seed an example row (disabled by default) so the property pane shows users
+        // where to add their extension manifest IDs. Disabled — it doesn't try to load.
+        this.properties.extensibilityLibraryConfiguration = this.properties.extensibilityLibraryConfiguration ? this.properties.extensibilityLibraryConfiguration : [{
+            name: commonStrings.General.Extensibility.DefaultExtensibilityLibraryName,
+            enabled: false,
+            id: Constants.DEFAULT_EXTENSIBILITY_LIBRARY_COMPONENT_ID
+        }];
+    }
+
+    /**
+     * Loads extensions when the effective configuration changes. Explicit Search Filters
+     * configuration wins; otherwise enabled libraries are inherited from connected Results Web Parts.
+     */
+    private async ensureExtensionsLoaded(forceLoad: boolean = false): Promise<void> {
+        if (this.extensionsLoadingPromise !== undefined) {
+            await this.extensionsLoadingPromise;
+        }
+
+        const effectiveConfiguration = this.getEffectiveExtensibilityLibraryConfiguration();
+        const configurationKey = ExtensibilityConfigurationHelper.getConfigurationKey(effectiveConfiguration);
+        if (!forceLoad && configurationKey === this.loadedExtensibilityConfigurationKey) {
+            return;
+        }
+
+        if (configurationKey !== this.loadedExtensibilityConfigurationKey) {
+            this.handlebarsCustomizationTracker.reset(this.templateService.Handlebars);
+        }
+
+        this.extensionsLoadingPromise = (async () => {
+            await this.loadExtensions(effectiveConfiguration, forceLoad);
+            const instanceId = this.tryGetInstanceId();
+            if (instanceId) {
+                await this.templateService.registerWebComponents(this.availableWebComponentDefinitions, instanceId);
+            } else {
+                Log.verbose(LogSource, "Skipping web component registration because the instance ID is unavailable.", this.context?.serviceScope);
+            }
+            this.loadedExtensibilityConfigurationKey = configurationKey;
+        })();
+
+        try {
+            await this.extensionsLoadingPromise;
+        } finally {
+            this.extensionsLoadingPromise = undefined;
+        }
+    }
+
+    private getEffectiveExtensibilityLibraryConfiguration(): IExtensibilityConfiguration[] {
+        const connectedResultsConfigurations: IExtensibilityConfiguration[] = [];
+
+        this._dataSourceDynamicProperties.forEach(dynamicProperty => {
+            const sourceData = DynamicPropertyHelper.tryGetValueSafe(dynamicProperty);
+            if (sourceData?.extensibilityLibraryConfiguration) {
+                connectedResultsConfigurations.push(...sourceData.extensibilityLibraryConfiguration);
+            }
+        });
+
+        return ExtensibilityConfigurationHelper.resolveFiltersConfiguration(
+            this.properties.extensibilityLibraryConfiguration,
+            connectedResultsConfigurations
+        );
+    }
+
+    /**
+     * Loads extensions from the registered extensibility libraries
+     * @param librariesConfiguration the extensibility libraries configured on the Web Part
+     * @param forceLoad loads the libraries even if nothing custom is currently used (i.e. from the property pane, so custom
+     * layouts and filter controls become selectable before anything custom has been applied)
+     */
+    private async loadExtensions(librariesConfiguration: IExtensibilityConfiguration[], forceLoad: boolean = false) {
+
+        const { AvailableComponents } = await import(
+            /* webpackChunkName: 'pnp-modern-search-web-components' */
+            '../../components/AvailableComponents'
+        );
+        this.availableWebComponentDefinitions = AvailableComponents.BuiltinComponents;
+
+        // Only attempt to load extensibility libraries when the Web Part actually uses something provided
+        // by one. This avoids the slow retry/backoff load of a registered-but-undeployed library.
+        let librariesToLoad = librariesConfiguration || [];
+        const enabledCount = librariesToLoad.filter(configuration => configuration.enabled).length;
+
+        if (!forceLoad && enabledCount > 0) {
+            try {
+                const usage = await ExtensibilityUsageHelper.getFiltersUsage({
+                    selectedLayoutKey: this.properties.selectedLayoutKey,
+                    filtersConfiguration: this.properties.filtersConfiguration,
+                    inlineTemplateContent: this.properties.inlineTemplateContent,
+                    externalTemplateUrl: this.properties.externalTemplateUrl,
+                    layoutProperties: this.properties.layoutProperties,
+                    templateService: this.templateService,
+                    inspectExternalTemplates: this.displayMode !== DisplayMode.Edit,
+                    builtinLayoutKeys: AvailableLayouts.BuiltinLayouts.map(layout => layout.key),
+                    builtinFilterTemplateKeys: Object.keys(BuiltinFilterTypes),
+                    builtinComponentNames: this.availableWebComponentDefinitions.map(component => component.componentName)
+                });
+
+                if (!usage.usesCustomExtensibility) {
+                    librariesToLoad = [];
+                    const message = `Skipping load of ${enabledCount} enabled extensibility library/libraries — not used by this Web Part (${usage.reason}).`;
+                    Log.verbose(LogSource, message, this.context.serviceScope);
+                    ExtensibilityUsageHelper.debugLog(`[${LogSource}] ${message}`);
+                } else {
+                    const message = `Loading ${enabledCount} enabled extensibility library/libraries — the Web Part uses ${usage.reason}.`;
+                    Log.verbose(LogSource, message, this.context.serviceScope);
+                    ExtensibilityUsageHelper.debugLog(`[${LogSource}] ${message}`);
+                }
+            } catch (error) {
+                // If usage can't be determined, fall back to loading so nothing custom is missed.
+                const details = error instanceof Error ? error.message : String(error);
+                Log.warn(LogSource, `Could not evaluate extensibility usage; loading libraries as a fallback. Details: ${details}`, this.context.serviceScope);
+            }
+        }
+
+        const extensibilityLibraries = await this.extensibilityService.loadExtensibilityLibraries(librariesToLoad);
+
+        // Always start from the builtin definitions so a property pane reload doesn't duplicate entries
+        this.availableLayoutDefinitions = AvailableLayouts.BuiltinLayouts.filter(layout => { return layout.type === LayoutType.Filter; });
+        this.availableFilterControlDefinitions = [];
+
+        extensibilityLibraries.forEach((extensibilityLibrary: IExtensibilityLibrary) => {
+
+            // Add custom filter layouts if any
+            if (extensibilityLibrary.getCustomLayouts) {
+                this.availableLayoutDefinitions = this.availableLayoutDefinitions.concat(
+                    extensibilityLibrary.getCustomLayouts().filter(layout => layout && layout.type === LayoutType.Filter)
+                );
+            }
+
+            // Add custom filter controls if any
+            if (extensibilityLibrary.getCustomFilterControls) {
+                this.availableFilterControlDefinitions = this.availableFilterControlDefinitions.concat(
+                    extensibilityLibrary.getCustomFilterControls().filter(control => control && control.key && control.componentName)
+                );
+            }
+
+            // Add custom web components if any
+            if (extensibilityLibrary.getCustomWebComponents) {
+                this.availableWebComponentDefinitions = this.availableWebComponentDefinitions.concat(extensibilityLibrary.getCustomWebComponents());
+            }
+
+            // Registers Handlebars customizations in the local namespace
+            if (extensibilityLibrary.registerHandlebarsCustomizations) {
+                this.handlebarsCustomizationTracker.register(
+                    this.templateService.Handlebars,
+                    () => extensibilityLibrary.registerHandlebarsCustomizations(this.templateService.Handlebars)
+                );
+            }
+        });
+
+        // Remove duplicates coming from multiple libraries declaring the same key
+        this.availableLayoutDefinitions = uniqBy(this.availableLayoutDefinitions, 'key');
+        this.availableFilterControlDefinitions = uniqBy(this.availableFilterControlDefinitions, 'key');
+
+        // Make the custom controls available to the Handlebars helpers used by the builtin filter layouts
+        this.templateService.CustomFilterControls = this.availableFilterControlDefinitions;
+    }
+
+    /**
+     * Determines the extensibility libraries configuration fields
+     */
+    private getExtensibilityFields(): IPropertyPaneField<any>[] {
+
+        return [
+            this._propertyFieldCollectionData('extensibilityLibraryConfiguration', {
+                manageBtnLabel: commonStrings.PropertyPane.InformationPage.Extensibility.ManageBtnLabel,
+                key: 'extensibilityLibraryConfiguration',
+                enableSorting: true,
+                panelHeader: webPartStrings.PropertyPane.InformationPage.Extensibility.PanelHeader,
+                panelDescription: webPartStrings.PropertyPane.InformationPage.Extensibility.PanelDescription,
+                label: commonStrings.PropertyPane.InformationPage.Extensibility.FieldLabel,
+                value: this.properties.extensibilityLibraryConfiguration,
+                tableClassName: commonStyles.slotTable,
+                fields: [
+                    {
+                        id: 'name',
+                        title: commonStrings.PropertyPane.InformationPage.Extensibility.Columns.Name,
+                        type: this._customCollectionFieldType.string
+                    },
+                    {
+                        id: 'id',
+                        title: commonStrings.PropertyPane.InformationPage.Extensibility.Columns.Id,
+                        type: this._customCollectionFieldType.string,
+                        onGetErrorMessage: this._validateGuid.bind(this)
+                    },
+                    {
+                        id: 'enabled',
+                        title: commonStrings.PropertyPane.InformationPage.Extensibility.Columns.Enabled,
+                        type: this._customCollectionFieldType.custom,
+                        required: true,
+                        onCustomRender: (field, value, onUpdate, item, itemId) => {
+                            return (
+                                React.createElement("div", null,
+                                    React.createElement(Toggle, {
+                                        key: itemId,
+                                        checked: value,
+                                        offText: commonStrings.General.OffTextLabel,
+                                        onText: commonStrings.General.OnTextLabel,
+                                        onChange: ((evt, checked) => {
+                                            onUpdate(field.id, checked);
+                                        })
+                                    } as IToggleProps)
+                                )
+                            );
+                        }
+                    }
+                ]
+            })
+        ];
+    }
+
+    private _validateGuid(value: string): string {
+        if (value.length > 0) {
+            if (!(/^(\{){0,1}[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}(\}){0,1}$/).test(value)) {
+                return 'Invalid GUID';
+            }
+        }
+
+        return '';
     }
 
     /**
@@ -1603,16 +2106,18 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
             }
 
             this._verticalsSourceData.setReference(this.properties.verticalsDataSourceReference);
-            this._verticalsSourceData.register(this.render);
+            this._verticalsSourceData.register(this._onVerticalsDataChanged);
 
         } else {
             if (this._verticalsSourceData) {
-                this._verticalsSourceData.unregister(this.render);
+                this._verticalsSourceData.unregister(this._onVerticalsDataChanged);
             }
         }
     }
 
     public async loadPropertyPaneResources(): Promise<void> {
+
+        await this.loadCommonPropertyPaneResources();
 
         const { PropertyFieldCodeEditor, PropertyFieldCodeEditorLanguages } = await import(
             /* webpackChunkName: 'pnp-modern-search-code-editor', webpackMode: 'lazy' */
@@ -1634,6 +2139,12 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
             '@pnp/spfx-property-controls/lib/PropertyPanePropertyEditor'
         );
         this._propertyPanePropertyEditor = PropertyPanePropertyEditor;
+
+        const { PropertyPaneWebPartInformation } = await import(
+            /* webpackChunkName: 'pnp-modern-search-property-pane' */
+            '@pnp/spfx-property-controls/lib/PropertyPaneWebPartInformation'
+        );
+        this._propertyPaneWebPartInformation = PropertyPaneWebPartInformation;
 
         this.propertyPaneConnectionsFields = await this.getConnectionOptionsFields();
     }
@@ -1671,21 +2182,25 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
      * Initializes filter results according to 'Static' type filters in the configuration
      * @param filtersConfiguration The current filters configurations
      */
-    private _initStaticFilters(filterResults: IDataFilterResult[], filtersConfiguration: IDataFilterConfiguration[]): IDataFilterResult[] {
+    private _initStaticFilters(filterResults: IDataFilterResult[], filtersConfiguration: IDataFilterConfiguration[], isResultsLoading: boolean = false): IDataFilterResult[] {
 
-        let updatedFilterResults = cloneDeep(filterResults);
+        let updatedFilterResults: IFilterResultWithLimitInfo[] = cloneDeep(filterResults);
 
         // Get the corresponding configuration for this filter
         filtersConfiguration.forEach(filterConfiguration => {
 
-            if (BuiltinFilterTypes[filterConfiguration.selectedTemplate] === FilterType.StaticFilter) {
+            const shouldKeepVisibleWhenMissing =
+                FilterControlHelper.getFilterType(filterConfiguration.selectedTemplate, this.availableFilterControlDefinitions) === FilterType.StaticFilter
+                || filterConfiguration.selectedTemplate === BuiltinFilterTemplates.Hierarchical;
+
+            if (shouldKeepVisibleWhenMissing) {
 
                 // Check if the filter already exists
                 if (filterResults.filter(filterResult => filterResult.filterName === filterConfiguration.filterName).length === 0) {
                     updatedFilterResults.push({
                         filterName: filterConfiguration.filterName,
-                        values: [
-                        ]
+                        values: [],
+                        isAwaitingResultSignals: isResultsLoading && filterConfiguration.selectedTemplate === BuiltinFilterTemplates.Hierarchical
                     });
                 }
             }
@@ -1706,9 +2221,9 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
         };
 
         let allAvailableFieldsFromResults: string[] = [];
-        let allAvailableFilters: IDataFilterResult[] = [];
+        let allAvailableFilters: IFilterResultWithLimitInfo[] = [];
 
-        let allMergedFilters: IDataFilterResult[] = [];
+        let allMergedFilters: IFilterResultWithLimitInfo[] = [];
 
         // Get values for all dynamic properties
         dynamicProperties.forEach(dataSourceDynamicProperty => {
@@ -1718,7 +2233,7 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
 
                 // 1. Concatenate all values from all connected results Web Parts
                 allAvailableFieldsFromResults = allAvailableFieldsFromResults.concat(dataSourceData.availableFieldsFromResults);
-                allAvailableFilters = allAvailableFilters.concat(dataSourceData.availablefilters);
+                allAvailableFilters = allAvailableFilters.concat(dataSourceData.availablefilters as IFilterResultWithLimitInfo[]);
 
                 // Merge all custom registred Handlebars helpers from all connected Search Results Web Parts
                 if (dataSourceData.handlebarsContext) {
@@ -1756,6 +2271,10 @@ export default class SearchFiltersWebPart extends BaseWebPart<ISearchFiltersWebP
                 });
 
                 allMergedFilters[mergedFilterIdx].values = allMergedValues;
+                allMergedFilters[mergedFilterIdx].isMaxBucketsExceeded = Boolean(allMergedFilters[mergedFilterIdx].isMaxBucketsExceeded || filterResult.isMaxBucketsExceeded);
+                allMergedFilters[mergedFilterIdx].configuredMaxBuckets = allMergedFilters[mergedFilterIdx].configuredMaxBuckets ?? filterResult.configuredMaxBuckets;
+                allMergedFilters[mergedFilterIdx].returnedValueCount = Math.max(allMergedFilters[mergedFilterIdx].returnedValueCount ?? 0, filterResult.returnedValueCount ?? 0);
+                allMergedFilters[mergedFilterIdx].isEditModeCapApplied = Boolean(allMergedFilters[mergedFilterIdx].isEditModeCapApplied || filterResult.isEditModeCapApplied);
             }
         });
 

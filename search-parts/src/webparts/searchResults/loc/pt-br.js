@@ -1,4 +1,4 @@
-define([], function() {
+define([], function () {
     return {
         General: {
             PlaceHolder: {
@@ -9,7 +9,9 @@ define([], function() {
             },
             WebPartDefaultTitle: "Web Part de resultados de busca",
             ShowBlankEditInfoMessage: "Nenhum resultado retornado para esta consulta. Esta WebPart vai permanecer em branco em modo de exibição de acordo com os parâmetros.",
-            CurrentVerticalNotSelectedMessage: "A vertical selecionada atualmente não combina com a associada a esta Web Part. Ela permanecerá em branco no modo de exibição."
+            CurrentVerticalNotSelectedMessage: "A vertical selecionada atualmente não combina com a associada a esta Web Part. Ela permanecerá em branco no modo de exibição.",
+            RollupSuggestionMessage: "Esta Web Part de Resultados de Pesquisa não está conectada a nenhuma outra Web Part na página. Considere usar a versão 'PnP - Search Rollup' em vez disso — ela pode ser carregada de forma preguiçosa pelo SharePoint e não disparará consultas à fonte de dados até ser rolada para a visualização, melhorando o desempenho de carregamento da página.",
+            RollupSuggestionLinkText: "Saiba mais"
         },
         PropertyPane: {
             DataSourcePage: {
@@ -22,6 +24,7 @@ define([], function() {
                 HideNavigationFieldName: "Esconder botões de navegação (próxima página, página anterior)",
                 HideFirstLastPagesFieldName: "Esconder botões de navegação primeiro/último",
                 HideDisabledFieldName: "Esconder botões de navegação (anterior, próximo, primeiro, último) de eles estiverem desativados.",
+                EnableQueryStringFieldName: "Ativar número da página na URL",
                 TemplateSlots: {
                     GroupName: "Slots do layout",
                     ConfigureSlotsLabel: "Editar slots do layout para esta fonte de dados",
@@ -38,6 +41,10 @@ define([], function() {
                 LayoutSelectionGroupName: "Layouts disponíveis",
                 LayoutTemplateOptionsGroupName: "Opções de layout",
                 CommonOptionsGroupName: "Comum",
+                ShowTitle: "Mostrar título",
+                TitleLinkTextFieldLabel: "Texto do link \"Ver tudo\"",
+                TitleLinkUrlFieldLabel: "URL do link \"Ver tudo\"",
+                TitleLinkOpenInNewTab: "Abrir em uma nova guia",
                 TemplateUrlFieldLabel: "Usar um URL de modelo externo",
                 TemplateUrlPlaceholder: "https://meu-site/meu-arquivo.html",
                 ErrorTemplateExtension: "O modelo precisa ser um arquivo .txt, .htm ou .html válido",
@@ -99,7 +106,7 @@ define([], function() {
                 UseFiltersFromComponentLabel: "Usar filtros deste componente",
                 UseDynamicFilteringsWebPartLabel: "Conectar a uma Web Part de resultados de busca",
                 UseDataResultsFromComponentsLabel: "Usar os dados desta Web Part",
-                UseDataResultsFromComponentsDescription: "Usar dados de itens selecionados destas Web Parts",                
+                UseDataResultsFromComponentsDescription: "Usar dados de itens selecionados destas Web Parts",
                 UseSearchVerticalsWebPartLabel: "Conectar com uma Web Part de verticais",
                 UseSearchVerticalsFromComponentLabel: "Usar as verticais deste componente",
                 LinkToVerticalLabel: "Exibir dados somente quando a seguinte vertical estiver selecionada",
@@ -115,7 +122,8 @@ define([], function() {
                 SearchQueryTextDefaultValue: "Valor padrão",
                 SourceDestinationFieldLabel: "Nome do campo de destino",
                 SourceDestinationFieldDescription: "Campo de destino para usar nesta WebPart mara combinar com os valores selecionados",
-                AvailableFieldValuesFromResults: "Campo contendo o valor do filtro"
+                AvailableFieldValuesFromResults: "Campo contendo o valor do filtro",
+                BidirectionalConnectionWarning: "A Web Part de filtros conectada não foi configurada para se conectar de volta a esta Web Part de resultados de pesquisa. Ambas as Web Parts devem estar conectadas entre si para que os filtros funcionem corretamente."
             },
             InformationPage: {
                 Extensibility: {
@@ -130,7 +138,7 @@ define([], function() {
                 EnabledPropertyLabel: "Ativado",
                 ModifierNamePropertyLabel: "Nome",
                 ModifierDescriptionPropertyLabel: "Descrição",
-                EndWhenSuccessfullPropertyLabel:"Terminar quando bem sucedido!"                
+                EndWhenSuccessfullPropertyLabel: "Terminar quando bem sucedido!"
             }
         },
         Styling: {

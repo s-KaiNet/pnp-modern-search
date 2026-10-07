@@ -9,7 +9,9 @@ define([], function () {
             },
             WebPartDefaultTitle: "Suchergebnis Webpart",
             ShowBlankEditInfoMessage: "Keine Ergebnisse für diese Abfrage. Dieses Webpart bleibt im Anzeigemodus entsprechend den Parametern leer.",
-            CurrentVerticalNotSelectedMessage: "Die aktuell ausgewählte Vertikale stimmt nicht mit der für dieses Webpart zugeordneten überein. Sie bleibt im Anzeigemodus leer."
+            CurrentVerticalNotSelectedMessage: "Die aktuell ausgewählte Vertikale stimmt nicht mit der für dieses Webpart zugeordneten überein. Sie bleibt im Anzeigemodus leer.",
+            RollupSuggestionMessage: "Dieses Suchergebnisse-Webpart ist nicht mit einem anderen Webpart auf der Seite verbunden. Erwägen Sie stattdessen die Verwendung der Version 'PnP - Search Rollup' — sie kann von SharePoint verzögert geladen werden und löst keine Datenquellenabfragen aus, bis sie in den sichtbaren Bereich gescrollt wird, wodurch die Seitenladeleistung verbessert wird.",
+            RollupSuggestionLinkText: "Weitere Informationen"
         },
         PropertyPane: {
             DataSourcePage: {
@@ -22,6 +24,7 @@ define([], function () {
                 HideNavigationFieldName: "Navigationsknopf verstecken (Seite vor/zurück)",
                 HideFirstLastPagesFieldName: "Anfang/Ende Navigationsknöpfe verstecken",
                 HideDisabledFieldName: "Navigationsknöpfe verstecken (vor, zurück, Anfang, Ende), wenn sie deaktiviert sind",
+                EnableQueryStringFieldName: "Seitenzahl in der URL aktivieren",
                 TemplateSlots: {
                     GroupName: "Layout Slots",
                     ConfigureSlotsLabel: "Layout Slots für diese Datenquelle bearbeiten",
@@ -38,6 +41,10 @@ define([], function () {
                 LayoutSelectionGroupName: "Verfügbare Layouts",
                 LayoutTemplateOptionsGroupName: "Layout Optionen",
                 CommonOptionsGroupName: "Allgemein",
+                ShowTitle: "Titel anzeigen",
+                TitleLinkTextFieldLabel: "Text für \"Alle anzeigen\"",
+                TitleLinkUrlFieldLabel: "URL für \"Alle anzeigen\"",
+                TitleLinkOpenInNewTab: "In neuem Tab öffnen",
                 TemplateUrlFieldLabel: "Benutze eine externe Vorlagen URL",
                 TemplateUrlPlaceholder: "https://meineDatei.html",
                 ErrorTemplateExtension: "Die Vorlage muss eine gültige .txt, .html oder .html Datei sein",
@@ -115,7 +122,8 @@ define([], function () {
                 SearchQueryTextDefaultValue: "Standardwert",
                 SourceDestinationFieldLabel: "Ergebnis Feldname",
                 SourceDestinationFieldDescription: "Zielfeld, das in diesem Webpart verwendet werden soll, um die ausgewählten Werte abzugleichen",
-                AvailableFieldValuesFromResults: "Feld, das den Filterwert enthält"
+                AvailableFieldValuesFromResults: "Feld, das den Filterwert enthält",
+                BidirectionalConnectionWarning: "Das verbundene Filter-Webpart wurde nicht so konfiguriert, dass es eine Rückverbindung zu diesem Suchergebnis-Webpart herstellt. Beide Webparts müssen miteinander verbunden sein, damit die Filter korrekt funktionieren."
             },
             InformationPage: {
                 Extensibility: {

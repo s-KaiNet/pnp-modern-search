@@ -7,16 +7,16 @@ import {
     IPropertyPaneField,
     IPropertyPaneGroup,
     PropertyPaneTextField,
+    PropertyPaneToggle,
     PropertyPaneSlider,
     PropertyPaneButton,
     PropertyPaneButtonType
 } from '@microsoft/sp-property-pane';
-import { PropertyFieldColorPicker, PropertyFieldColorPickerStyle } from '@pnp/spfx-property-controls/lib/PropertyFieldColorPicker';
 import * as commonStrings from 'CommonStrings';
 import * as webPartStrings from 'SearchVerticalsWebPartStrings';
 import { ISearchVerticalsContainerProps } from './components/ISearchVerticalsContainerProps';
 import { ISearchVerticalsWebPartProps } from './ISearchVerticalsWebPartProps';
-import SearchVerticalsContainer from './components/SearchVerticalsContainer';
+const SearchVerticalsContainer = React.lazy(() => import(/* webpackChunkName: 'pnp-modern-search-verticals-container' */ './components/SearchVerticalsContainer'));
 import { ComponentType } from '../../common/ComponentType';
 import { IDynamicDataCallables, IDynamicDataPropertyDefinition } from '@microsoft/sp-dynamic-data';
 import { IDataVerticalSourceData } from '../../models/dynamicData/IDataVerticalSourceData';
@@ -101,7 +101,20 @@ export default class DataVerticalsWebPart extends BaseWebPart<ISearchVerticalsWe
         }
     }
 
+    /**
+     * Tracks whether the Web Part has been disposed. Async callbacks may resolve after the instance
+     * is torn down; rendering then crashes because 'this.context' is no longer available. This flag
+     * lets render() bail out safely.
+     */
+    private _webPartDisposed: boolean = false;
+
     public async render(): Promise<void> {
+
+        // The Web Part may have been disposed while an async callback was in flight. Rendering a
+        // disposed instance crashes because 'this.context' is no longer available, so bail out early.
+        if (this._webPartDisposed) {
+            return;
+        }
 
         // Check audience targeting - if user is not in audience, don't render
         const isInAudience = await this.isInAudience();
@@ -114,26 +127,8 @@ export default class DataVerticalsWebPart extends BaseWebPart<ISearchVerticalsWe
 
         let renderRootElement: JSX.Element = null;
 
-        let defaultSelectedKey: string = undefined;
-
-        // Check if we can find a default vertical to set
-        if (this.properties.defaultVerticalQueryStringParam) {
-            const queryParms: UrlQueryParameterCollection = new UrlQueryParameterCollection(window.location.href.toLowerCase());
-            const defaultQueryVal: string = queryParms.getValue(this.properties.defaultVerticalQueryStringParam.toLowerCase());
-
-            if (defaultQueryVal) {
-                const defaultSelected: IDataVerticalConfiguration[] = this.properties.verticals.filter(v => v.tabName.toLowerCase() === decodeURIComponent(defaultQueryVal));
-                if (defaultSelected.length === 1) {
-                    defaultSelectedKey = defaultSelected[0].key;
-                }
-            }
-        } else {
-            const pagename = window.location.pathname.toLowerCase();
-            const defaultSelected: IDataVerticalConfiguration[] = this.properties.verticals.filter(v => v.isLink && v.linkUrl.toLowerCase().indexOf(pagename) > -1);
-            if (defaultSelected.length === 1) {
-                defaultSelectedKey = defaultSelected[0].key;
-            }
-        }
+        // Resolve the vertical that should be selected by default (from query string or current page).
+        const defaultSelectedKey: string = this._resolveDefaultSelectedKey();
 
         if (this.displayMode === DisplayMode.Edit && this.properties.verticals.length === 0) {
 
@@ -157,39 +152,73 @@ export default class DataVerticalsWebPart extends BaseWebPart<ISearchVerticalsWe
                 verticalsToBeDisplayed = await this._filterVerticalsByAudience(verticalsToBeDisplayed);
             }
             renderRootElement = React.createElement(
-                SearchVerticalsContainer,
-                {
-                    verticals: verticalsToBeDisplayed,
-                    webPartTitleProps: {
-                        displayMode: this.displayMode,
-                        title: this.properties.title,
-                        updateProperty: (value: string) => {
-                            this.properties.title = value;
-                            this.render();
+                React.Suspense,
+                { fallback: null },
+                React.createElement(
+                    SearchVerticalsContainer,
+                    {
+                        verticals: verticalsToBeDisplayed,
+                        webPartTitleProps: {
+                            displayMode: this.displayMode,
+                            title: this.properties.title,
+                            updateProperty: (value: string) => {
+                                this.properties.title = value;
+                                this.render();
+                            },
+                            themeVariant: this._themeVariant,
+                            className: commonStyles.wpTitle
                         },
+                        tokenService: this.tokenService,
                         themeVariant: this._themeVariant,
-                        className: commonStyles.wpTitle
-                    },
-                    tokenService: this.tokenService,
-                    themeVariant: this._themeVariant,
-                    onVerticalSelected: this.onVerticalSelected.bind(this),
-                    defaultSelectedKey: defaultSelectedKey,
-                    verticalBackgroundColor: this.properties.verticalBackgroundColor,
-                    verticalBorderColor: this.properties.verticalBorderColor,
-                    verticalBorderThickness: this.properties.verticalBorderThickness,
-                    verticalFontSize: this.properties.verticalFontSize,
-                    verticalMouseOverColor: this.properties.verticalMouseOverColor,
-                    titleFont: this.properties.titleFont,
-                    titleFontSize: this.properties.titleFontSize,
-                    titleFontColor: this.properties.titleFontColor,
-                    instanceId: this.instanceId
-                } as ISearchVerticalsContainerProps
+                        onVerticalSelected: this.onVerticalSelected.bind(this),
+                        defaultSelectedKey: defaultSelectedKey,
+                        verticalBackgroundColor: this.properties.verticalBackgroundColor,
+                        verticalBorderColor: this.properties.verticalBorderColor,
+                        verticalBorderThickness: this.properties.verticalBorderThickness,
+                        verticalFontSize: this.properties.verticalFontSize,
+                        verticalMouseOverColor: this.properties.verticalMouseOverColor,
+                        titleFont: this.properties.titleFont,
+                        titleFontSize: this.properties.titleFontSize,
+                        titleFontColor: this.properties.titleFontColor,
+                        instanceId: this.instanceId
+                    } as ISearchVerticalsContainerProps
+                )
             );
         }
 
 
+        // The Web Part may have been disposed while awaiting audience filtering above. Rendering a
+        // disposed instance crashes because 'this.context' is no longer available, so bail out.
+        if (this._webPartDisposed || !this.context) {
+            return;
+        }
+
         // eslint-disable-next-line @rushstack/pair-react-dom-render-unmount -- render is paired with unmount in onDispose
         ReactDom.render(renderRootElement, this.domElement);
+    }
+
+    /**
+     * Resolves the key of the vertical that should be selected by default, based either on the
+     * configured query-string parameter or on the current page URL (for link verticals).
+     * Returns undefined when no single matching vertical is found.
+     */
+    private _resolveDefaultSelectedKey(): string {
+
+        if (this.properties.defaultVerticalQueryStringParam) {
+            const queryParms: UrlQueryParameterCollection = new UrlQueryParameterCollection(window.location.href.toLowerCase());
+            const defaultQueryVal: string = queryParms.getValue(this.properties.defaultVerticalQueryStringParam.toLowerCase());
+
+            if (defaultQueryVal) {
+                const defaultSelected: IDataVerticalConfiguration[] = this.properties.verticals.filter(v => v.tabName.toLowerCase() === decodeURIComponent(defaultQueryVal));
+                return defaultSelected.length === 1 ? defaultSelected[0].key : undefined;
+            }
+
+            return undefined;
+        }
+
+        const pagename = window.location.pathname.toLowerCase();
+        const defaultSelected: IDataVerticalConfiguration[] = this.properties.verticals.filter(v => v.isLink && v.linkUrl.toLowerCase().indexOf(pagename) > -1);
+        return defaultSelected.length === 1 ? defaultSelected[0].key : undefined;
     }
 
     /**
@@ -233,10 +262,11 @@ export default class DataVerticalsWebPart extends BaseWebPart<ISearchVerticalsWe
 
     public getPropertyDefinitions(): IDynamicDataPropertyDefinition[] {
         // Use the Web Part title as property title since we don't expose sub properties
+        const instanceId = this.tryGetInstanceId() || '';
         return [
             {
                 id: ComponentType.SearchVerticals,
-                title: this.properties.title ? `${this.properties.title} - ${this.instanceId}` : `${webPartStrings.General.WebPartDefaultTitle} - ${this.instanceId}`
+                title: this.properties.title ? `${this.properties.title} - ${instanceId}` : `${webPartStrings.General.WebPartDefaultTitle} - ${instanceId}`
             }
         ];
     }
@@ -247,6 +277,7 @@ export default class DataVerticalsWebPart extends BaseWebPart<ISearchVerticalsWe
             case ComponentType.SearchVerticals:
                 return {
                     selectedVertical: this._selectedVertical,
+                    clearFiltersOnVerticalChange: this.properties.clearFiltersOnVerticalChange,
                     verticalsConfiguration: this.properties.verticals,
                 } as IDataVerticalSourceData;
 
@@ -268,6 +299,7 @@ export default class DataVerticalsWebPart extends BaseWebPart<ISearchVerticalsWe
     }
 
     protected onDispose(): void {
+        this._webPartDisposed = true;
         // eslint-disable-next-line @rushstack/pair-react-dom-render-unmount -- paired with render in renderCompleted
         ReactDom.unmountComponentAtNode(this.domElement);
     }
@@ -324,6 +356,8 @@ export default class DataVerticalsWebPart extends BaseWebPart<ISearchVerticalsWe
     }
 
     protected async loadPropertyPaneResources(): Promise<void> {
+
+        await this.loadCommonPropertyPaneResources();
 
         // tslint:disable-next-line:no-shadowed-variable
         const { PropertyFieldCollectionData, CustomCollectionFieldType } = await import(
@@ -492,6 +526,12 @@ export default class DataVerticalsWebPart extends BaseWebPart<ISearchVerticalsWe
                     }
                 ]
             }),
+            PropertyPaneToggle('clearFiltersOnVerticalChange', {
+                label: webPartStrings.PropertyPane.Verticals.ClearFiltersOnVerticalChangeLabel,
+                onText: commonStrings.General.OnTextLabel,
+                offText: commonStrings.General.OffTextLabel,
+                checked: this.properties.clearFiltersOnVerticalChange === true
+            }),
             PropertyPaneTextField('defaultVerticalQueryStringParam', {
                 label: webPartStrings.PropertyPane.Verticals.DefaultVerticalQueryStringParamLabel,
                 description: webPartStrings.PropertyPane.Verticals.DefaultVerticalQueryStringParamDescription
@@ -506,7 +546,7 @@ export default class DataVerticalsWebPart extends BaseWebPart<ISearchVerticalsWe
             groupName: webPartStrings.PropertyPane.Styling.WebPartContentStylingGroupName,
             isCollapsed: true,
             groupFields: [
-                PropertyFieldColorPicker('verticalBackgroundColor', {
+                this._basePropertyFieldColorPicker('verticalBackgroundColor', {
                     label: webPartStrings.PropertyPane.Styling.VerticalBackgroundColorLabel,
                     selectedColor: this.properties.verticalBackgroundColor,
                     onPropertyChange: this.onPropertyPaneFieldChanged,
@@ -515,10 +555,10 @@ export default class DataVerticalsWebPart extends BaseWebPart<ISearchVerticalsWe
                     debounce: 1000,
                     isHidden: false,
                     alphaSliderHidden: false,
-                    style: PropertyFieldColorPickerStyle.Inline,
+                    style: this._basePropertyFieldColorPickerStyle.Inline,
                     key: 'verticalBackgroundColorFieldId'
                 }),
-                PropertyFieldColorPicker('verticalMouseOverColor', {
+                this._basePropertyFieldColorPicker('verticalMouseOverColor', {
                     label: webPartStrings.PropertyPane.Styling.MouseOverColorLabel,
                     selectedColor: this.properties.verticalMouseOverColor,
                     onPropertyChange: this.onPropertyPaneFieldChanged,
@@ -527,10 +567,10 @@ export default class DataVerticalsWebPart extends BaseWebPart<ISearchVerticalsWe
                     debounce: 1000,
                     isHidden: false,
                     alphaSliderHidden: false,
-                    style: PropertyFieldColorPickerStyle.Inline,
+                    style: this._basePropertyFieldColorPickerStyle.Inline,
                     key: 'verticalMouseOverColorFieldId'
                 }),
-                PropertyFieldColorPicker('verticalBorderColor', {
+                this._basePropertyFieldColorPicker('verticalBorderColor', {
                     label: webPartStrings.PropertyPane.Styling.VerticalBorderColorLabel,
                     selectedColor: this.properties.verticalBorderColor,
                     onPropertyChange: this.onPropertyPaneFieldChanged,
@@ -539,7 +579,7 @@ export default class DataVerticalsWebPart extends BaseWebPart<ISearchVerticalsWe
                     debounce: 1000,
                     isHidden: false,
                     alphaSliderHidden: false,
-                    style: PropertyFieldColorPickerStyle.Inline,
+                    style: this._basePropertyFieldColorPickerStyle.Inline,
                     key: 'verticalBorderColorFieldId'
                 }),
                 PropertyPaneSlider('verticalBorderThickness', {

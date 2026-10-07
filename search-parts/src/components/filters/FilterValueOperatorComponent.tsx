@@ -1,7 +1,7 @@
 import * as React from "react";
 import { BaseWebComponent, ExtensibilityConstants, FilterConditionOperator } from "@pnp/modern-search-extensibility";
 import * as ReactDOM from "react-dom";
-import { ChoiceGroup, Icon } from '@fluentui/react';
+import { ChoiceGroup, Icon, ITheme, getTheme } from '@fluentui/react';
 import { IReadonlyTheme } from '@microsoft/sp-component-base';
 import * as commonStrings from 'CommonStrings';
 import styles from "./FilterValueOperatorComponent.module.scss";
@@ -35,14 +35,40 @@ export interface IFilterValueOperatorState {
 }
 
 export class FilterValueOperator extends React.Component<IFilterValueOperatorProps, IFilterValueOperatorState> {
+    private static readonly GLOBAL_BUSY_CURSOR_STYLE_ID = 'pnp-modern-search-busy-cursor-style';
+
+    private setImmediateProgressCursor(): void {
+        if (!globalThis.document) {
+            return;
+        }
+
+        if (globalThis.document.documentElement) {
+            globalThis.document.documentElement.style.setProperty('cursor', 'progress', 'important');
+        }
+
+        if (globalThis.document.body) {
+            globalThis.document.body.style.setProperty('cursor', 'progress', 'important');
+        }
+
+        const styleId = FilterValueOperator.GLOBAL_BUSY_CURSOR_STYLE_ID;
+        if (!globalThis.document.getElementById(styleId)) {
+            const styleElement = globalThis.document.createElement('style');
+            styleElement.id = styleId;
+            styleElement.textContent = '* { cursor: progress !important; }';
+            globalThis.document.head.appendChild(styleElement);
+        }
+    }
 
     public constructor(props: IFilterValueOperatorProps) {
         super(props);  
     }
     
     public render() {
+        const theme = (this.props.themeVariant as ITheme) || getTheme();
+        const textColor = theme.semanticColors.bodyText ?? '#323130';
 
         let renderOperators: JSX.Element =  <ChoiceGroup tabIndex={0}
+                                                theme={theme}
                                                 styles={{
                                                     flexContainer: {
                                                         display: 'flex',
@@ -54,6 +80,14 @@ export class FilterValueOperator extends React.Component<IFilterValueOperatorPro
                                                             '.ms-ChoiceField + .ms-ChoiceField': {
                                                                 marginLeft: 0
                                                             },
+                                                            // Render the visual '/' separator between the two operators as a
+                                                            // presentational pseudo-element instead of a (disabled) radio option,
+                                                            // so screen readers announce only the two real options (e.g. '1 of 2').
+                                                            '.ms-ChoiceField + .ms-ChoiceField::before': {
+                                                                content: '"/"',
+                                                                padding: '0 4px',
+                                                                color: textColor
+                                                            },
                                                             'label::before, label::after': {
                                                                 display: 'none',
                                                             },
@@ -62,10 +96,10 @@ export class FilterValueOperator extends React.Component<IFilterValueOperatorPro
                                                             },
                                                             'label.is-checked span.ms-ChoiceFieldLabel, label.is-checked:hover, label.is-checked span.ms-ChoiceFieldLabel:hover': {
                                                                 fontWeight: 700,
-                                                                color: this.props.themeVariant ? this.props.themeVariant.palette.themePrimary : '#005a9e'
+                                                                color: theme.palette.themePrimary
                                                             },
                                                             'label span.ms-ChoiceFieldLabel, label span.ms-ChoiceFieldLabel:hover': {
-                                                                color: this.props.themeVariant.isInverted ? '#fff' : this.props.themeVariant.semanticColors.bodyText
+                                                                color: textColor
                                                             }
                                                         }
                                                     }
@@ -78,23 +112,19 @@ export class FilterValueOperator extends React.Component<IFilterValueOperatorPro
                                                         title: commonStrings.Filters.UseAndOperatorValues
                                                     },
                                                     {
-                                                        key: null,
-                                                        text: "/",
-                                                        disabled: true
-                                                    },
-                                                    {
                                                         key: FilterConditionOperator.OR,
                                                         text: commonStrings.Filters.OrOperator,
                                                         title: commonStrings.Filters.UseOrOperatorValues
                                                     }
                                                 ]} 
                                                 onChange={(ev, option) => {
+                                                    this.setImmediateProgressCursor();
                                                     this.props.onFilterOperatorUpdated(option.key as FilterConditionOperator);
                                                 }}
                                             />;
 
         return  <div className={styles.filterValueOperator}>
-                    <Icon iconName="FilterSettings" title={commonStrings.Filters.UseValuesOperators}/>
+                    <Icon iconName="FilterSettings" title={commonStrings.Filters.UseValuesOperators} styles={{ root: { color: textColor } }}/>
                     {renderOperators}
                 </div>;
     }

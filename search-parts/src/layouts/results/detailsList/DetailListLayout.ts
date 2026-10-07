@@ -77,6 +77,11 @@ export interface IDetailsListLayoutProperties {
     enableDownload: boolean;
 
     /**
+    * If the details action should be available for selected items
+     */
+    enableDetails?: boolean;
+
+    /**
      * enable in order to have every other row with a different background color
      */
     useAlternatingBackgroundColor?: boolean;
@@ -98,7 +103,7 @@ export class DetailsListLayout extends BaseLayout<IDetailsListLayoutProperties> 
             [
                 {
                     name: 'Title',
-                    value: '<a href="{{slot item @root.slots.PreviewUrl}}" target="_blank" style="color: {{@root.theme.semanticColors.link}}">\n\t{{slot item @root.slots.Title}}\n</a>',
+                    value: '<a href="{{slot item @root.slots.PreviewUrl}}" target="_blank">\n\t{{slot item @root.slots.Title}}\n</a>',
                     useHandlebarsExpr: true,
                     minWidth: '80',
                     maxWidth: '300',
@@ -136,6 +141,8 @@ export class DetailsListLayout extends BaseLayout<IDetailsListLayoutProperties> 
         this.properties.groupByOthersGroupTitle = this.properties.groupByOthersGroupTitle ?? strings.Layouts.DetailsList.GroupByOthersGroupDefaultValue;
         this.properties.additionalGroupByFields = this.properties.additionalGroupByFields ?? [];
         this.properties.groupsCollapsed = this.properties.groupsCollapsed ?? true;
+        const legacyEnableDetails = (this.properties as { enableLiveUpdate?: boolean }).enableLiveUpdate;
+        this.properties.enableDetails = this.properties.enableDetails ?? legacyEnableDetails ?? false;
 
         if (this.editMode) {
             const { PropertyFieldCollectionData, CustomCollectionFieldType } = await import(
@@ -169,8 +176,8 @@ export class DetailsListLayout extends BaseLayout<IDetailsListLayoutProperties> 
         // Sort ascending
         availableOptions = availableOptions.sort((a, b) => {
 
-            const aValue = a.text ? a.text : a.key ? a.key.toString() : null;
-            const bValue = b.text ? b.text : b.key ? b.key.toString() : null;
+            const aValue = a.text || (a.key ? a.key.toString() : null);
+            const bValue = b.text || (b.key ? b.key.toString() : null);
 
             if (aValue && bValue) {
                 if (aValue.toLowerCase() > bValue.toLowerCase()) return 1;
@@ -276,6 +283,13 @@ export class DetailsListLayout extends BaseLayout<IDetailsListLayoutProperties> 
                         type: this._customCollectionFieldType.boolean,
                         defaultValue: false,
                         required: false
+                    },
+                    {
+                        id: 'columnDescription',
+                        title: strings.Layouts.DetailsList.ColumnDescriptionFieldLabel,
+                        type: this._customCollectionFieldType.string,
+                        defaultValue: '',
+                        required: false
                     }
                 ]
             }),
@@ -297,6 +311,10 @@ export class DetailsListLayout extends BaseLayout<IDetailsListLayoutProperties> 
             PropertyPaneToggle('layoutProperties.showFileIcon', {
                 label: strings.Layouts.DetailsList.ShowFileIcon,
                 checked: this.properties.showFileIcon
+            }),
+            PropertyPaneToggle('layoutProperties.enableDetails', {
+                label: strings.Layouts.DetailsList.EnableDetails,
+                checked: this.properties.enableDetails
             }),
         ];
 
@@ -397,10 +415,7 @@ export class DetailsListLayout extends BaseLayout<IDetailsListLayoutProperties> 
             PropertyPaneToggle('layoutProperties.enableDownload', {
                 label: strings.Layouts.DetailsList.EnableDownload,
                 checked: this.properties.enableDownload
-            })
-        );
-
-        propertyPaneFields.push(
+            }),
             PropertyPaneToggle('layoutProperties.useAlternatingBackgroundColor', {
                 label: strings.Layouts.DetailsList.UseAlternatingBackgroundColor || 'Use Alternating Background color',
                 checked: this.properties.useAlternatingBackgroundColor

@@ -4,6 +4,7 @@ import * as strings from "CommonStrings";
 import { isEmpty, uniqBy, uniq } from "@microsoft/sp-lodash-subset";
 import { UrlHelper } from "./UrlHelper";
 import { ObjectHelper } from "./ObjectHelper";
+import { StringHelper } from "./StringHelper";
 
 /**
  * Internalized subset of handlebars-helpers.
@@ -81,13 +82,11 @@ function helperEq(this: any, a: any, b: any, options: any): any {
 
 function helperIs(this: any, a: any, b: any, options: any): any {
     if (arguments.length === 2) { options = b; b = options.hash.compare; }
-    // eslint-disable-next-line eqeqeq
     return value(a == b, this, options);
 }
 
 function helperIsnt(this: any, a: any, b: any, options: any): any {
     if (arguments.length === 2) { options = b; b = options.hash.compare; }
-    // eslint-disable-next-line eqeqeq
     return value(a != b, this, options);
 }
 
@@ -115,10 +114,8 @@ function helperCompare(this: any, a: any, operator: string, b: any, options: any
     if (arguments.length < 4) throw new Error('{{compare}} expects 4 arguments');
     let result: boolean;
     switch (operator) {
-        // eslint-disable-next-line eqeqeq
         case '==': result = a == b; break;
         case '===': result = a === b; break;
-        // eslint-disable-next-line eqeqeq
         case '!=': result = a != b; break;
         case '!==': result = a !== b; break;
         case '<': result = a < b; break;
@@ -224,6 +221,69 @@ function helperStartsWith(this: any, prefix: string, str: string, options: any):
     }
     return typeof options.inverse === 'function' ? options.inverse(this) : '';
 }
+
+function helperStringToHex(str: any): string {
+    if (str === null || str === undefined) return '';
+    return StringHelper._bytesToHex(StringHelper._stringToUTF8Bytes(String(str)));
+}
+
+function helperHexToString(hex: any): string {
+    if (hex === null || hex === undefined) return '';
+    return StringHelper.hexToString(String(hex));
+}
+
+const helperFormatSPFileSize: (bytes: any) => string = (() => {
+    /**
+     * Tiered decimal precision, identical for every unit (matches SharePoint):
+     *   value < 10  → 2 decimals   (e.g. "5.04 KB"; 9.999 → "10.00 KB")
+     *   value < 100 → 1 decimal    (e.g. "79.0 MB"; 99.96 → "100.0 KB")
+     *   otherwise   → integer, rounded   (e.g. "253 MB")
+     * A value that is already a whole number never shows decimals ("2 KB", "1 MB").
+     */
+    function formatSizeUnit(value: number, unit: string): string {
+        if (Number.isInteger(value)) return `${value} ${unit}`;
+
+        let decimals = 0;
+        if (value < 10) decimals = 2;
+        else if (value < 100) decimals = 1;
+
+        return decimals > 0
+            ? `${value.toFixed(decimals)} ${unit}`
+            : `${Math.round(value)} ${unit}`;
+    }
+
+    /**
+     * Returns the byte count, or undefined (→ blank) for empty, non-numeric,
+     * negative, or non-integer input. Values above Number.MAX_SAFE_INTEGER
+     * (~8 PB) are also rejected; SharePoint's max file size is 250 GB, so this
+     * bound is unreachable in practice.
+     */
+    function tryGetValidFileSizeBytes(bytes: any): number | undefined {
+        const raw = typeof bytes === 'string' ? bytes.trim() : bytes;
+        if (raw === undefined || raw === '') return undefined;
+        if (!isNumber(raw)) return undefined;
+        const n = Number(raw);
+        if (!Number.isSafeInteger(n) || n < 0) return undefined;
+        return n;
+    }
+
+    return function helperFormatSPFileSize(bytes: any): string {
+        const b = tryGetValidFileSizeBytes(bytes);
+        if (b === undefined || b === 0) return '';
+        if (b < 1024) return b === 1 ? '1 byte' : `${b} bytes`;
+
+        // Divide by 1024 per unit, but promote once the value reaches 1000 (not 1024):
+        // a ~1018.88 KB file (1043333 B) shows as "0.99 MB", not "1019 KB".
+        const units = ['KB', 'MB', 'GB', 'TB'];
+        let value = b / 1024;
+        let i = 0;
+        while (value >= 1000 && i < units.length - 1) {
+            value /= 1024;
+            i++;
+        }
+        return formatSizeUnit(value, units[i]);
+    };
+})();
 
 // ─── Object helpers ───────────────────────────────────────────────────────────
 
@@ -493,6 +553,9 @@ export function getHandlebarsHelpers(): Record<string, (...args: any[]) => any> 
         split: helperSplit,
         trim: helperTrim,
         startsWith: helperStartsWith,
+        stringToHex: helperStringToHex,
+        hexToString: helperHexToString,
+        formatSPFileSize: helperFormatSPFileSize,
 
         // object
         JSONstringify: helperJSONstringify,

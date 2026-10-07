@@ -1,4 +1,4 @@
-define([], function() {
+define([], function () {
     return {
         General: {
             PlaceHolder: {
@@ -8,7 +8,13 @@ define([], function() {
                 ConfigureBtnLabel: "Konfigurér"
             },
             NoAvailableFilterMessage: "Ingen tilgængelige filtre at vise.",
-            WebPartDefaultTitle: "Søgefiltre-webpart"
+            WebPartDefaultTitle: "Søgefiltre-webpart",
+            StaticPeoplePicker: {
+                RemoveSelectedUserTitle: "Fjern {0}",
+                SearchUsersPlaceholder: "Søg efter brugere",
+                LoadingTenantUsersLabel: "Indlæser brugere...",
+                NoUsersFoundMessage: "Ingen brugere fundet."
+            }
         },
         PropertyPane: {
             ConnectionsPage: {
@@ -16,7 +22,8 @@ define([], function() {
                 UseDataResultsFromComponentsLabel: "Anvend data fra disse webparts",
                 UseDataResultsFromComponentsDescription: "Hvis du forbinder mere end en webpart, flettes filterværdier til lignende filternavne.",
                 LinkToVerticalLabel: "Vis kun filtre, når følgende vertikaler er valgt",
-                LinkToVerticalLabelHoverMessage: "Filtrene vil kun blive vist, hvis den valgte vertikal matcher med dem, der er konfigureret til denne webdel. Ellers vil webdelen være tom (ingen margen og ingen polstring) i visningstilstand."
+                LinkToVerticalLabelHoverMessage: "Filtrene vil kun blive vist, hvis den valgte vertikal matcher med dem, der er konfigureret til denne webdel. Ellers vil webdelen være tom (ingen margen og ingen polstring) i visningstilstand.",
+                BidirectionalConnectionWarning: "En eller flere tilsluttede søgeresultatwebdele er ikke konfigureret til at forbinde tilbage til denne filterwebdel. Begge webdele skal være forbundet til hinanden, for at filtre kan fungere korrekt."
             },
             FiltersSettingsPage: {
                 SettingsGroupName: "Indstillinger til filtre",
@@ -28,8 +35,14 @@ define([], function() {
                 FilterDisplayName: "Visningsnavn",
                 FilterMaxBuckets: "Antal værdier",
                 FilterMaxBucketsWarning: "Det maksimale antal værdier er 1000",
+                FilterLimitReachedWarningToggle: "Vis advarsel, når grænsen er nået",
+                FilterLimitReachedWarningMessage: "Resultatgrænsen er nået — ikke alle matchende elementer vises. Forfin din søgning for at indsnævre listen.",
+                EditModeRefinerLimitReachedWarningMessage: "I redigeringstilstand er filtrene begrænset til maksimalt 100 elementer.",
+                PeopleTemplateQUserMappingWarning: "Advarsel for personskabelon: værdierne ligner ikke brugeridentiteter. Egenskaben er sandsynligvis ikke knyttet til en Q_USER-crawlet egenskab.",
                 FilterTemplate: "Skabelon",
                 FilterExpandByDefault: "Udvid som standard",
+                ExpandAllNodesByDefault: "Udvid alle noder som standard",
+                HideNodesNotInDataSet: "Skjul noder, der ikke findes i det aktuelle datasæt",
                 // FilterType: "Filtertype",
                 FilterTypeRefiner: "Denne skabelon til filtre agerer som en refiner og modtager/sender tilgængelige/valgte værdier fra/til the forbundne datakilde.",
                 FilterTypeStaticFilter: "Denne skabelon til filtre agerer som et statisk filter og sender kun vilkårligt udvalgte værdier til den forbundne datakilde. Indgående filterværdier bliver ikke taget i betragtning.",
@@ -48,7 +61,9 @@ define([], function() {
                     ComboBoxTemplate: "Combo-boks",
                     DateIntervalTemplate: "Datointerval",
                     PeopleTemplate: "Personskabelon",
-                    TaxonomyPickerTemplate: "Taksonomivælger"
+                    StaticPeopleTemplate: "Statisk personskabelon",
+                    TaxonomyPickerTemplate: "Taksonomivælger",
+                    HierarchicalFilterTemplate: "Hierarkisk filter"
                 },
                 SortBy: "Sortér værdier efter",
                 SortDirection: "Sortér efter retning",
@@ -66,6 +81,12 @@ define([], function() {
                 ErrorTemplateResolve: "Ude af stand til at vise den specifikke skabelon. Fejloplysninger: '{0}'",
                 FiltersTemplateFieldLabel: "Redigér skabelon til filtre",
                 FiltersTemplatePanelHeader: "Redigér skabelon til filtre"
+            },
+            InformationPage: {
+                Extensibility: {
+                    PanelHeader: "Konfigurér extensibility-biblioteker så de indlæser ved opstart.",
+                    PanelDescription: "Tilføj/Fjern ID på dit extensibility-bibliotek her. Du kan specificere et visningsnavn og beslutte, om biblioteket skal indlæses eller ej ved opstart. Kun brugerdefinerede filterlayouts, filterkontroller, web-komponenter og Handlebars-hjælpere vil blive loadet her."
+                }
             }
         },
         Styling: {

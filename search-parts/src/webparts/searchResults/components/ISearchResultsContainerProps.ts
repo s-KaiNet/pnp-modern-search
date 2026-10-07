@@ -5,6 +5,7 @@ import { IDataContext } from "@pnp/modern-search-extensibility";
 import { PageContext } from "@microsoft/sp-page-context";
 import { ServiceScope } from "@microsoft/sp-core-library";
 import { IWebPartTitleProps } from "@pnp/spfx-controls-react/lib/WebPartTitle";
+import * as React from 'react';
 
 export interface ISearchResultsContainerProps {
 
@@ -12,6 +13,12 @@ export interface ISearchResultsContainerProps {
    * The current Web Part data context
    */
   dataContext: IDataContext;
+
+  /**
+   * A page-wide id that changes every time a connected Search Box submits (Enter or the Search
+   * button), even when the query text is unchanged. Lets the results re-query on re-submission (issue #4790).
+   */
+  lastSubmittedQueryId?: number;
 
   /**
    * The current page context
@@ -59,6 +66,11 @@ export interface ISearchResultsContainerProps {
   onDataRetrieved: (availableDataSourceFields: string[], filters?: IDataFilterResult[], pageNumber?: number) => void;
 
   /**
+   * Handler when the data source loading state changes.
+   */
+  onDataLoadingChanged: (isLoading: boolean) => void;
+
+  /**
    * Handler when a item has been selected from results
    */
   onItemSelected: (currentSelectedItems: {[key: string]: any}[]) => void; 
@@ -77,6 +89,11 @@ export interface ISearchResultsContainerProps {
    * The Web Part Title props
    */
   webPartTitleProps: IWebPartTitleProps;
+
+  /**
+   * Optional action rendered on the right side of the title bar
+   */
+  titleAction?: React.ReactNode;
 
   /**
    * The layout render type (Handlebars, Adaptive Cards, etc.)

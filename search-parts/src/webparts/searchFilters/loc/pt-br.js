@@ -1,4 +1,4 @@
-define([], function() {
+define([], function () {
     return {
         General: {
             PlaceHolder: {
@@ -8,7 +8,13 @@ define([], function() {
                 ConfigureBtnLabel: "Configurar"
             },
             NoAvailableFilterMessage: "Nenhum filtro disponível para exibir.",
-            WebPartDefaultTitle: "Web Part de Filtro de Busca"
+            WebPartDefaultTitle: "Web Part de Filtro de Busca",
+            StaticPeoplePicker: {
+                RemoveSelectedUserTitle: "Remover {0}",
+                SearchUsersPlaceholder: "Pesquisar usuários",
+                LoadingTenantUsersLabel: "Carregando usuários do locatário...",
+                NoUsersFoundMessage: "Nenhum usuário encontrado."
+            }
         },
         PropertyPane: {
             ConnectionsPage: {
@@ -16,7 +22,8 @@ define([], function() {
                 UseDataResultsFromComponentsLabel: "Usar dados destas Web Parts",
                 UseDataResultsFromComponentsDescription: "Se você conectar mais de uma Web Part, os valores e contadores do filtro vão ser mesclados em nomes de filtro similares.",
                 LinkToVerticalLabel: "Exibir filtros somente quando as seguintes verticais forem selecionadas",
-                LinkToVerticalLabelHoverMessage: "Os filtros serão exibidos somente se a vertical selecionada combinar com uma das configuradas para esta Web Part. Caso contrário, a Web Part ficará em branco (sem margens nem preenchimento) no mode de exibição."
+                LinkToVerticalLabelHoverMessage: "Os filtros serão exibidos somente se a vertical selecionada combinar com uma das configuradas para esta Web Part. Caso contrário, a Web Part ficará em branco (sem margens nem preenchimento) no mode de exibição.",
+                BidirectionalConnectionWarning: "Uma ou mais Web Parts de resultados de pesquisa conectadas não foram configuradas para se conectar de volta a esta Web Part de filtros. Ambas as Web Parts devem estar conectadas entre si para que os filtros funcionem corretamente."
             },
             FiltersSettingsPage: {
                 SettingsGroupName: "Configurações dos filtros",
@@ -27,9 +34,15 @@ define([], function() {
                 FilterNameLabel: "Campo de filtro",
                 FilterMaxBuckets: "# de valores",
                 FilterMaxBucketsWarning: "O número máximo de valores é 1000",
+                FilterLimitReachedWarningToggle: "Mostrar aviso quando o limite for atingido",
+                FilterLimitReachedWarningMessage: "Limite de resultados atingido — nem todos os itens correspondentes são exibidos. Refine sua pesquisa para restringir a lista.",
+                EditModeRefinerLimitReachedWarningMessage: "No modo de edição, os filtros são limitados a no máximo 100 itens.",
+                PeopleTemplateQUserMappingWarning: "Aviso do modelo de pessoas: os valores não parecem identidades de usuário. Esta propriedade provavelmente não está mapeada para uma propriedade rastreada Q_USER.",
                 FilterDisplayName: "Nome de exibição",
                 FilterTemplate: "Modelo",
                 FilterExpandByDefault: "Expandido por padrão",
+                ExpandAllNodesByDefault: "Expandir todos os nós por padrão",
+                HideNodesNotInDataSet: "Ocultar nós que não estão no conjunto de dados atual",
                 FilterType: "Tipo de filtro",
                 FilterTypeRefiner: "Este modelo de filtro age como um refinador e recebe/envia valores disponíveis/selecionados de/para a fonte de dados conectada.",
                 FilterTypeStaticFilter: "Este modelo de filtro age como um filtro estático e apensa envia valores selecionados arbitrários para a fonte de dados selecionada. Valores de filtro de entrada não são levados em consideração.",
@@ -48,7 +61,9 @@ define([], function() {
                     ComboBoxTemplate: "Lista de seleção",
                     DateIntervalTemplate: "Intervalo de datas",
                     PeopleTemplate: "Modelo de pessoa",
-                    TaxonomyPickerTemplate: "Seletor de taxonomia"
+                    StaticPeopleTemplate: "Modelo de pessoa estático",
+                    TaxonomyPickerTemplate: "Seletor de taxonomia",
+                    HierarchicalFilterTemplate: "Filtro hierárquico"
                 },
                 SortBy: "Ordenar valores por",
                 SortDirection: "Direção da ordenação",
@@ -66,6 +81,12 @@ define([], function() {
                 ErrorTemplateResolve: "Não foi possível resolver o modelo especificado. Detalhes do erro: '{0}'",
                 FiltersTemplateFieldLabel: "Modelo de edição de filtros",
                 FiltersTemplatePanelHeader: "Modelo de edição de filtros"
+            },
+            InformationPage: {
+                Extensibility: {
+                    PanelHeader: "Configurar bibliotecas de extensibilidade para carregar no início.",
+                    PanelDescription: "Adicione/Remove os IDs de suas bibliotecas de extensibilidade aqui. Você pode especificar um nome de exibição e decidir se a biblioteca deve ser carregada ou não no início. Apenas layouts de filtros, controles de filtro, componentes web e funções para marcadores entre chaves customizados serão carregados aqui."
+                }
             }
         },
         Styling: {

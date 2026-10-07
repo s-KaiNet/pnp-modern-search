@@ -1,4 +1,4 @@
-define([], function() {
+define([], function () {
     return {
         General: {
             PlaceHolder: {
@@ -9,7 +9,9 @@ define([], function() {
             },
             WebPartDefaultTitle: "Web Part de resultados de búsqueda",
             ShowBlankEditInfoMessage: "No se devuelve ningún resultado para esta consulta. Este Web Part permanecerá en blanco en el modo de visualización según los parámetros.",
-            CurrentVerticalNotSelectedMessage: "La vertical seleccionada actualmente no coincide con la asociada a este Web Part. Permanecerá en blanco en el modo de visualización."
+            CurrentVerticalNotSelectedMessage: "La vertical seleccionada actualmente no coincide con la asociada a este Web Part. Permanecerá en blanco en el modo de visualización.",
+            RollupSuggestionMessage: "Este Web Part de Resultados de búsqueda no está conectado a ningún otro Web Part en la página. Considere usar la versión 'PnP - Search Rollup' en su lugar — puede ser cargada de forma diferida por SharePoint y no ejecutará consultas al origen de datos hasta que se desplace a la vista, mejorando el rendimiento de carga de la página.",
+            RollupSuggestionLinkText: "Más información"
         },
         PropertyPane: {
             DataSourcePage: {
@@ -22,6 +24,7 @@ define([], function() {
                 HideNavigationFieldName: "Ocultar los botones de navegación (página anterior, página siguiente)",
                 HideFirstLastPagesFieldName: "Ocultar los botones de navegación primero/último",
                 HideDisabledFieldName: "Ocultar los botones de navegación (anterior, siguiente, primero, ultimo) si están desactivados.",
+                EnableQueryStringFieldName: "Activar el número de página en la URL",
                 TemplateSlots: {
                     GroupName: "Ranuras de diseño",
                     ConfigureSlotsLabel: "Editar ranuras de diseño para esta fuente de datos",
@@ -38,6 +41,10 @@ define([], function() {
                 LayoutSelectionGroupName: "Diseños disponibles",
                 LayoutTemplateOptionsGroupName: "Opciones de diseño",
                 CommonOptionsGroupName: "Común",
+                ShowTitle: "Mostrar título",
+                TitleLinkTextFieldLabel: "Texto de \"Ver todo\"",
+                TitleLinkUrlFieldLabel: "URL de \"Ver todo\"",
+                TitleLinkOpenInNewTab: "Abrir en una nueva pestaña",
                 TemplateUrlFieldLabel: "Utilizar una URL de plantilla externa",
                 TemplateUrlPlaceholder: "https://myfile.html",
                 ErrorTemplateExtension: "La plantilla debe ser un archivo .txt, .htm o .html válido",
@@ -51,7 +58,7 @@ define([], function() {
                 HandlebarsRenderTypeLabel: "Handlebars/HTML",
                 HandlebarsRenderTypeDesc: "Selecciona diseños basados en HTML, CSS y Handlebars",
                 AdaptiveCardsRenderTypeLabel: "Adaptive Cards",
-                AdaptiveCardsRenderTypeDesc: "Seleccione diseños basados en tarjetas adaptables JSON",                
+                AdaptiveCardsRenderTypeDesc: "Seleccione diseños basados en tarjetas adaptables JSON",
                 Handlebars: {
                     UseMicrosoftGraphToolkit: "Utilizar Microsoft Graph Toolkit",
                     ResultTypes: {
@@ -91,7 +98,7 @@ define([], function() {
                 },
                 AdaptiveCards: {
                     HostConfigFieldLabel: "Configuración de host"
-                }                
+                }
             },
             ConnectionsPage: {
                 ConnectionsPageGroupName: "Conexiones disponibles",
@@ -99,7 +106,7 @@ define([], function() {
                 UseFiltersFromComponentLabel: "Utilizar los filtros de este componente",
                 UseDynamicFilteringsWebPartLabel: "Conectar con un Web Part de resultados de búsqueda",
                 UseDataResultsFromComponentsLabel: "Utilizar los datos de este Web Part",
-                UseDataResultsFromComponentsDescription: "Utilice los datos de los elementos seleccionados en estos Web Parts",                
+                UseDataResultsFromComponentsDescription: "Utilice los datos de los elementos seleccionados en estos Web Parts",
                 UseSearchVerticalsWebPartLabel: "Conectar con un Web Part vertical",
                 UseSearchVerticalsFromComponentLabel: "Utilizar las verticales de este componente",
                 LinkToVerticalLabel: "Mostrar datos sólo cuando se selecciona la siguiente vertical",
@@ -115,7 +122,8 @@ define([], function() {
                 SearchQueryTextDefaultValue: "Valor por defecto",
                 SourceDestinationFieldLabel: "Nombre del campo de destino",
                 SourceDestinationFieldDescription: "Campo de destino a utilizar en este Web Part para que coincida con los valores seleccionados",
-                AvailableFieldValuesFromResults: "Campo que contiene el valor del filtro"
+                AvailableFieldValuesFromResults: "Campo que contiene el valor del filtro",
+                BidirectionalConnectionWarning: "El Web Part de filtros conectado no ha sido configurado para conectarse de vuelta a este Web Part de resultados de búsqueda. Ambos Web Parts deben estar conectados entre sí para que los filtros funcionen correctamente."
             },
             InformationPage: {
                 Extensibility: {
@@ -124,13 +132,13 @@ define([], function() {
                 }
             },
             CustomQueryModifier: {
-                  EditQueryModifiersLabel: "Configurar los modificadores de consulta personalizados disponibles",
-                  QueryModifiersLabel: "Modificadores de consulta personalizados",
-                  QueryModifiersDescription: "Habilitar o deshabilitar modificadores de consulta personalizados individuales",
-                  EnabledPropertyLabel: "Habilitado",
-                  ModifierNamePropertyLabel: "Nombre",
-                  ModifierDescriptionPropertyLabel: "Descripción",
-                  EndWhenSuccessfullPropertyLabel:"Finalizar cuando se ha realizado con éxito"              
+                EditQueryModifiersLabel: "Configurar los modificadores de consulta personalizados disponibles",
+                QueryModifiersLabel: "Modificadores de consulta personalizados",
+                QueryModifiersDescription: "Habilitar o deshabilitar modificadores de consulta personalizados individuales",
+                EnabledPropertyLabel: "Habilitado",
+                ModifierNamePropertyLabel: "Nombre",
+                ModifierDescriptionPropertyLabel: "Descripción",
+                EndWhenSuccessfullPropertyLabel: "Finalizar cuando se ha realizado con éxito"
             }
         },
         Styling: {
